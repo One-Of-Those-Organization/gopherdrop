@@ -43,8 +43,8 @@
     <main class="flex-1 overflow-y-auto">
         <div class="max-w-3xl mx-auto px-4 lg:px-10 py-6 lg:py-12">
             <!-- Header -->
-            <header class="mb-8 lg:mb-12">
-                <h1 class="text-2xl lg:text-4xl font-bold tracking-tight text-slate-900">Settings</h1>
+            <header class="mb-8 lg:mb-12 bg-transparent">
+                <h1 class="text-2xl lg:text-4xl font-bold tracking-tight">Settings</h1>
                 <p class="text-slate-500 mt-1 text-sm lg:text-base">Configure your device identity and interface preferences</p>
             </header>
 
@@ -95,15 +95,15 @@
                     </div>
                     
                     <div class="grid grid-cols-3 gap-3 lg:gap-4">
-                        <button class="theme-btn active" onclick="selectTheme(this)">
+                        <button class="theme-btn" data-theme="light" onclick="selectTheme(this)">
                             <span class="material-symbols-outlined text-2xl lg:text-3xl mb-2" style="font-variation-settings: 'FILL' 1">light_mode</span>
                             <span class="text-[9px] lg:text-[10px] font-bold uppercase tracking-widest">Light</span>
                         </button>
-                        <button class="theme-btn" onclick="selectTheme(this)">
+                        <button class="theme-btn" data-theme="dark" onclick="selectTheme(this)">
                             <span class="material-symbols-outlined text-2xl lg:text-3xl mb-2">dark_mode</span>
                             <span class="text-[9px] lg:text-[10px] font-bold uppercase tracking-widest">Dark</span>
                         </button>
-                        <button class="theme-btn" onclick="selectTheme(this)">
+                        <button class="theme-btn" data-theme="auto" onclick="selectTheme(this)">
                             <span class="material-symbols-outlined text-2xl lg:text-3xl mb-2">monitor</span>
                             <span class="text-[9px] lg:text-[10px] font-bold uppercase tracking-widest">Auto</span>
                         </button>
@@ -122,16 +122,11 @@
     </main>
 
     <!-- Scripts -->
+    <script src="../assets/js/theme.js"></script>
     <script src="../assets/js/app.js"></script>
     
     <!-- Settings Page Script -->
     <script>
-        // Theme Selection
-        function selectTheme(btn) {
-            document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        }
-
         // Mobile menu functions
         function openMobileMenu() {
             const sidebar = document.querySelector('[data-mobile-menu]');
