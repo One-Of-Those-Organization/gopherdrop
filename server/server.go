@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"log"
 	"github.com/gofiber/fiber/v2"
-	// "github.com/golang-jwt/jwt/v5"
+	// jwtware "github.com/gofiber/contrib/jwt"
 	"gorm.io/gorm"
 )
 
@@ -37,6 +37,9 @@ func (s *Server)StartServer() {
 
 func (s *Server)SetupAllEndPoint() {
 	api_pub := s.App.Group("/api/v1/")
+    // protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
+    //     SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
+    // }))
 
 	// GET: /
 	// testing the server if its running.
