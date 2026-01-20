@@ -2,6 +2,7 @@ package main
 
 // pion
 // gorm
+// jwt
 import (
 	"fmt"
 	server "gopherdrop/server"
@@ -14,5 +15,6 @@ func main() {
 	combined := fmt.Sprintf("%s:%s", ip, port)
 
 	ser := server.InitServer(combined)
+	ser.SetupAllEndPoint()
 	ser.StartServer()
 }
