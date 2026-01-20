@@ -10,7 +10,7 @@ import (
 type User struct {
 	ID			 int		`gorm:"primaryKey" json:"id"`
 	Username	 string		`gorm:"column:username" json:"username"`
-	Password	 string		`gorm:"column:password" json:"-"`
+	PublicKey	 string		`gorm:"column:public_key" json:"public_key"`
 	CreatedAt	 time.Time	`gorm:"column:user_created_at;type:datetime"`
 }
 

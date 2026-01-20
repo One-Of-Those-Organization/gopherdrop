@@ -1,11 +1,10 @@
 package helper
 
 import (
-	"fmt"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"math/rand"
-	"golang.org/x/crypto/bcrypt"
 	"os"
 )
 
@@ -36,33 +35,30 @@ func GetConfigFromEnv() GoDropConfig {
     }
     return sec
 }
-func WrapBase64(value string) string {
-    str := base64.StdEncoding.EncodeToString([]byte(value))
-    return str
+
+func GenerateChallenge() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
 }
 
-func CreateRandomString(n int) (string, error) {
-    if n <= 0 {
-        return "", errors.New("invalid OTP len requested.")
-    }
+func VerifySignature(pubKeyBase64, messageBase64, sigBase64 string) (bool, error) {
+	pubKey, err := base64.StdEncoding.DecodeString(pubKeyBase64)
+	if err != nil || len(pubKey) != ed25519.PublicKeySize {
+		return false, errors.New("invalid public key")
+	}
 
-    b := make([]byte, n)
-	max := len(letterBytes)
-	min := 0
-    for i := range b {
-        num := rand.Intn(max - min) + min
-        b[i] = letterBytes[num]
-    }
-    result := string(b)
-	return result, nil
-}
+	message, err := base64.StdEncoding.DecodeString(messageBase64)
+	if err != nil {
+		return false, errors.New("invalid message")
+	}
 
-func HashPassword(password string) (string, error) {
-    // The cost parameter determines how computationally expensive the hash is to calculate
-    // The default is 10, but you can increase it for better security (at the cost of performance)
-    hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-    if err != nil {
-        return "", errors.New(fmt.Sprintf("Failed to hash password: %v", err))
-    }
-    return string(hashedBytes), nil
+	sig, err := base64.StdEncoding.DecodeString(sigBase64)
+	if err != nil {
+		return false, errors.New("invalid signature")
+	}
+
+	return ed25519.Verify(pubKey, message, sig), nil
 }
