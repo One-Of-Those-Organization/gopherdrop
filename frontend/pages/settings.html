@@ -112,7 +112,7 @@
 
                 <!-- Save Button -->
                 <div class="pt-6 lg:pt-8 pb-8 lg:pb-12 flex justify-center">
-                    <button class="w-full sm:w-auto min-w-[280px] bg-primary text-white font-bold py-4 lg:py-5 px-8 rounded-full shadow-xl shadow-primary/30 hover:brightness-105 hover:-translate-y-0.5 active:scale-[0.98] transition-all flex items-center justify-center gap-3">
+                    <button onclick="saveConfiguration()" class="w-full sm:w-auto min-w-[280px] bg-primary text-white font-bold py-4 lg:py-5 px-8 rounded-full shadow-xl shadow-primary/30 hover:brightness-105 hover:-translate-y-0.5 active:scale-[0.98] transition-all flex items-center justify-center gap-3">
                         <span class="text-sm lg:text-base uppercase tracking-widest">Save Configuration</span>
                         <span class="material-symbols-outlined text-xl lg:text-2xl">done_all</span>
                     </button>
@@ -123,6 +123,7 @@
 
     <!-- Scripts -->
     <script src="../assets/js/theme.js"></script>
+    <script src="../assets/js/auth.js"></script>
     <script src="../assets/js/app.js"></script>
     
     <!-- Settings Page Script -->
@@ -145,6 +146,67 @@
         }
         
         document.getElementById('mobile-menu-btn')?.addEventListener('click', openMobileMenu);
+
+        // Load saved device name on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const deviceNameInput = document.getElementById('device_name');
+            if (deviceNameInput && window.GopherDropAuth) {
+                const savedName = GopherDropAuth.getDeviceName();
+                if (savedName) {
+                    deviceNameInput.value = savedName;
+                }
+            }
+        });
+
+        // Save Configuration - integrate with Auth
+        async function saveConfiguration() {
+            const deviceNameInput = document.getElementById('device_name');
+            const deviceName = deviceNameInput?.value.trim();
+
+            if (!deviceName) {
+                alert('Please enter a device name.');
+                deviceNameInput?.focus();
+                return;
+            }
+
+            // Show loading state
+            const saveBtn = document.querySelector('button[onclick="saveConfiguration()"]');
+            const originalText = saveBtn?.innerHTML;
+            if (saveBtn) {
+                saveBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span> Saving...';
+                saveBtn.disabled = true;
+            }
+
+            try {
+                if (window.GopherDropAuth) {
+                    if (!GopherDropAuth.isRegistered()) {
+                        // First time - register with new key pair
+                        console.log('[Settings] Registering new device...');
+                        const result = await GopherDropAuth.registerDevice(deviceName);
+                        if (result.success) {
+                            alert('Device registered successfully! Your cryptographic keys have been generated.');
+                        } else if (result.localOnly) {
+                            alert('Keys generated and saved locally. Backend registration will complete when server is available.');
+                        } else {
+                            alert('Registration completed locally. ' + (result.error || ''));
+                        }
+                    } else {
+                        // Update device name only
+                        localStorage.setItem(GopherDropAuth.STORAGE_KEYS.DEVICE_NAME, deviceName);
+                        alert('Settings saved successfully!');
+                    }
+                }
+            } catch (error) {
+                console.error('[Settings] Save error:', error);
+                alert('Error saving settings: ' + error.message);
+            } finally {
+                // Restore button
+                if (saveBtn) {
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                }
+            }
+        }
     </script>
 </body>
 </html>
