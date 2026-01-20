@@ -1,45 +1,44 @@
 package server
 
 import (
-	"log"
 	"github.com/gofiber/fiber/v2"
+	"log"
 	"sync"
-	// jwtware "github.com/gofiber/contrib/jwt"
 	"gorm.io/gorm"
 	"time"
 )
 
 type Server struct {
-	Url	 string
-	App  *fiber.App
-	DB   *gorm.DB
-	Pass string
-	Challenges map[string]time.Time
+	Url         string
+	App         *fiber.App
+	DB          *gorm.DB
+	Pass        string
+	Challenges  map[string]time.Time
 	ChallengeMu sync.RWMutex
 }
 
 func InitServer(url string, password string) *Server {
 	app := fiber.New(fiber.Config{
-        AppName: "GopherDrop Backend Ow0",
-    })
-    return &Server{
-        App: app,
-		Url: url,
-		Pass: password,
+		AppName: "GopherDrop Backend Ow0",
+	})
+	return &Server{
+		App:        app,
+		Url:        url,
+		Pass:       password,
 		Challenges: make(map[string]time.Time),
-    }
+	}
 }
 
-func (s *Server)StartServer() {
+func (s *Server) StartServer() {
 	log.Printf("Server started at: %s\n", s.Url)
 	s.App.Listen(s.Url)
 }
 
-func (s *Server)SetupAllEndPoint() {
+func (s *Server) SetupAllEndPoint() {
 	api_pub := s.App.Group("/api/v1/")
-    // protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
-    //     SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
-    // }))
+	// protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
+	//     SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
+	// }))
 
 	// GET: /
 	// testing the server if its running.
@@ -52,8 +51,14 @@ func (s *Server)SetupAllEndPoint() {
 
 	// POST: /api/v1/login
 	// to login from the generated password and id
-	// - data: id: int, password string
+	// - data: id: int, challenge string, signature string
+	// NOTE: the challenge is the exact same stuff you got from the `SetupChallenge` and the result
+	//       of sign with your private key is `signature`.
 	SetupLogin(s, api_pub)
+
+	// POST: /api/v1/challenge
+	// to get challenge for logging in
+	SetupChallange(s, api_pub)
 }
 
 func StartJanitor(s *Server) {

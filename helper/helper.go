@@ -1,6 +1,8 @@
 package helper
 
 import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -61,4 +63,16 @@ func VerifySignature(pubKeyBase64, messageBase64, sigBase64 string) (bool, error
 	}
 
 	return ed25519.Verify(pubKey, message, sig), nil
+}
+
+func GetJWT(c *fiber.Ctx) (jwt.MapClaims, error) {
+    user := c.Locals("user").(*jwt.Token)
+    if user == nil {
+        return nil, errors.New("JWT token not valid")
+    }
+    if !user.Valid {
+        return nil, errors.New("JWT token expired")
+    }
+    claims := user.Claims.(jwt.MapClaims)
+    return claims, nil
 }

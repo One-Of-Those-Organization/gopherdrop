@@ -1,9 +1,11 @@
 package server
 
 import (
-	"time"
+	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"gopherdrop/helper"
+	"time"
 )
 
 var Counter int = 0
@@ -14,17 +16,18 @@ type Ret struct {
 	Error   int    `json:"code"`
 	Data    any    `json:"data"`
 }
+
 func cret(Success bool, Message string, Data any) Ret {
 	Counter += 1
-	return Ret{ Success, Message, Counter - 1, Data }
+	return Ret{Success, Message, Counter - 1, Data}
 }
 
 func resp(c *fiber.Ctx, ret Ret, code int) error {
-    return c.Status(code).JSON(ret)
+	return c.Status(code).JSON(ret)
 }
 
 func SetupRoot(s *Server) {
-	s.App.Get("/", func (c *fiber.Ctx) error {
+	s.App.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Server is online")
 	})
 
@@ -59,8 +62,10 @@ func SetupRegister(s *Server, group fiber.Router) {
 	})
 }
 
-func SetupLogin(s *Server, group fiber.Router) {
-	if s.Challenges == nil { s.Challenges = make(map[string]time.Time) }
+func SetupChallange(s *Server, group fiber.Router) {
+	if s.Challenges == nil {
+		s.Challenges = make(map[string]time.Time)
+	}
 	group.Get("/challenge", func(c *fiber.Ctx) error {
 		challenge, _ := helper.GenerateChallenge()
 		s.ChallengeMu.Lock()
@@ -68,7 +73,9 @@ func SetupLogin(s *Server, group fiber.Router) {
 		s.ChallengeMu.Unlock()
 		return resp(c, cret(true, "challenge", challenge), fiber.StatusOK)
 	})
+}
 
+func SetupLogin(s *Server, group fiber.Router) {
 	group.Post("/login", func(c *fiber.Ctx) error {
 		var b struct {
 			Username  string `json:"username"`
@@ -104,6 +111,18 @@ func SetupLogin(s *Server, group fiber.Router) {
 			return resp(c, cret(false, "Authentication failed", nil), fiber.StatusBadRequest)
 		}
 
-		return resp(c, cret(true, "Login success", user), fiber.StatusOK)
+		claims := jwt.MapClaims{
+			"username":   user.Username,
+			"public_key": user.PublicKey,
+			"exp":        time.Now().Add(time.Hour * 72).Unix(),
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+		t, err := token.SignedString([]byte(s.Pass))
+		if err != nil {
+			return resp(c, cret(false, fmt.Sprintf("Failed to generate JWT, %v", err), nil), fiber.StatusInternalServerError)
+		}
+
+		return resp(c, cret(true, "token", t), fiber.StatusOK)
 	})
 }
