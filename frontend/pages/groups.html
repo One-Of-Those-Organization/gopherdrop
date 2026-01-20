@@ -73,7 +73,7 @@
         </div>
 
         <!-- Group Detail Panel (hidden by default) -->
-        <div id="group-detail-container" class="lg:flex-1 lg:max-w-3xl flex-col h-full bg-white relative hidden transition-all duration-300">
+        <div id="group-detail-container" class="lg:flex-1 flex-col h-full bg-white relative hidden transition-all duration-300">
             <!-- Back Button (Mobile only) -->
             <button class="lg:hidden absolute top-4 left-4 z-20 p-2 rounded-lg bg-white shadow-md hover:bg-slate-50 transition-all" onclick="hideGroupDetail()">
                 <span class="material-symbols-outlined">arrow_back</span>
@@ -90,7 +90,7 @@
                     <p class="text-slate-500 text-sm lg:text-base mt-1" id="group-description"></p>
                 </div>
                 <div class="flex gap-2 lg:gap-3">
-                    <button class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50" id="edit-group-btn">
+                    <button class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50" id="edit-group-btn" onclick="navigateToEditGroup()">
                         <span class="material-symbols-outlined text-lg lg:text-xl">edit</span>
                     </button>
                     <button class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-red-100 text-red-500 hover:bg-red-50" id="delete-group-btn">

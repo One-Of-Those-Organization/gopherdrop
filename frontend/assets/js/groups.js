@@ -198,6 +198,13 @@ function hideGroupDetail() {
     });
 }
 
+// Navigate to Edit Group page
+function navigateToEditGroup() {
+    if (selectedGroupId) {
+        window.location.href = `edit-group.html?id=${selectedGroupId}`;
+    }
+}
+
 // Initialize Groups Page
 function initGroupsPage() {
     // Load group list only (no detail shown initially)
