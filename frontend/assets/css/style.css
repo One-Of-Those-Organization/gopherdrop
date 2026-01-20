@@ -171,3 +171,93 @@ body {
   background: #e2e8f0;
   border-radius: 10px;
 }
+
+/* Settings Card */
+.settings-card {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+}
+
+/* Floating Label Input */
+.floating-label-group {
+  position: relative;
+}
+
+.floating-label-group input:focus + label,
+.floating-label-group input:not(:placeholder-shown) + label {
+  transform: translateY(-1.5rem) scale(0.85);
+  color: var(--primary);
+  background-color: white;
+  padding: 0 0.5rem;
+  margin-left: -0.25rem;
+}
+
+.floating-label-group label {
+  position: absolute;
+  left: 1.25rem;
+  top: 1.25rem;
+  color: #94a3b8;
+  pointer-events: none;
+  transition: all 0.2s;
+  transform-origin: left;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  position: relative;
+  width: 3rem;
+  height: 1.5rem;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.toggle-switch.active {
+  background: var(--primary);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: white;
+  border-radius: 9999px;
+  transition: transform 0.3s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(1.5rem);
+}
+
+/* Theme Button */
+.theme-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  border: 2px solid var(--border-color);
+  color: #94a3b8;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.theme-btn:hover {
+  border-color: #cbd5e1;
+}
+
+.theme-btn.active {
+  border-color: var(--primary);
+  background: rgba(0, 208, 255, 0.05);
+  color: var(--primary);
+}
