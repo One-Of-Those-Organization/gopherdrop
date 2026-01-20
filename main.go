@@ -4,10 +4,11 @@ package main
 import (
 	"log"
 	server "gopherdrop/server"
+	helper "gopherdrop/helper"
 )
 
 func main() {
-	sec := getConfigFromEnv()
+	sec := helper.GetConfigFromEnv()
 
     db, err := server.OpenDB(sec.DBPath)
     if err != nil {
