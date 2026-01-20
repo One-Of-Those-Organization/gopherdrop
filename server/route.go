@@ -19,12 +19,7 @@ func cret(Success bool, Message string, Data any) Ret {
 }
 
 func resp(c *fiber.Ctx, ret Ret) error {
-	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-		"success": ret.Success,
-		"message": ret.Message,
-		"error_code": ret.Error,
-		"data": ret.Data,
-	})
+	return c.Status(fiber.StatusBadRequest).JSON(ret)
 }
 
 func SetupRoot(s *Server) {

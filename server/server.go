@@ -1,19 +1,32 @@
 package server
 
 import (
+	"time"
+	"math/rand"
 	"log"
 	"github.com/gofiber/fiber/v2"
+	// "github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 )
 
 type Server struct {
-	Url string
-    App *fiber.App
+	Url	 string
+	App  *fiber.App
+	DB   *gorm.DB
+	Pass string
+	Rand *rand.Rand
 }
 
-func InitServer(url string) *Server {
+func InitServer(url string, password string) *Server {
+	rand_t := rand.New(rand.NewSource(time.Now().UnixNano()))
+	app := fiber.New(fiber.Config{
+        AppName: "GopherDrop Backend Ow0",
+    })
     return &Server{
-        App: fiber.New(),
+        App: app,
 		Url: url,
+		Rand: rand_t,
+		Pass: password,
     }
 }
 
