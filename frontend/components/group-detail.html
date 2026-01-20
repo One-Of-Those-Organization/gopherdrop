@@ -1,0 +1,51 @@
+<!-- Group Detail Component -->
+<div class="flex-1 flex flex-col h-full bg-white relative">
+    <!-- Header -->
+    <div class="px-4 lg:px-12 py-4 lg:py-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start gap-4 sticky top-0 bg-white/80 backdrop-blur-md z-10">
+        <div>
+            <div class="flex items-center gap-2 lg:gap-3 mb-1 lg:mb-2">
+                <span class="material-symbols-outlined text-primary text-lg lg:text-base">apartment</span>
+                <span class="text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-primary">Active Group</span>
+            </div>
+            <h3 class="text-xl lg:text-3xl font-bold text-slate-900" id="group-name">Engineering Team</h3>
+            <p class="text-slate-500 text-sm lg:text-base mt-1" id="group-description">Cross-functional group for internal file synchronization.</p>
+        </div>
+        <div class="flex gap-2 lg:gap-3">
+            <button class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50" id="edit-group-btn">
+                <span class="material-symbols-outlined text-lg lg:text-xl">edit</span>
+            </button>
+            <button class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-red-100 text-red-500 hover:bg-red-50" id="delete-group-btn">
+                <span class="material-symbols-outlined text-lg lg:text-xl">delete</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar">
+        <div class="p-4 lg:p-12 pb-24 lg:pb-32">
+            <section>
+                <!-- Section Header -->
+                <div class="flex items-center justify-between mb-4 lg:mb-6">
+                    <h4 class="text-[10px] lg:text-sm font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-slate-400">Member Devices</h4>
+                    <div class="flex items-center gap-2 text-primary font-bold text-xs lg:text-sm" id="online-count">
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        8 Online
+                    </div>
+                </div>
+
+                <!-- Device Grid -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 lg:gap-4" id="group-devices">
+                    <!-- Devices will be rendered here by JS -->
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Send Files Button -->
+    <div class="p-4 lg:p-8 bg-gradient-to-t from-white via-white/90 to-transparent border-t border-slate-50 absolute bottom-0 left-0 right-0 z-20">
+        <button class="w-full flex items-center justify-center gap-3 lg:gap-4 bg-primary text-white py-4 lg:py-5 rounded-xl lg:rounded-2xl font-bold shadow-lg shadow-primary/25 hover:brightness-105 active:scale-[0.99] transition-all" id="send-files-btn">
+            <span class="material-symbols-outlined text-xl lg:text-2xl">send</span>
+            <span class="text-base lg:text-lg">Send Files to Group</span>
+        </button>
+    </div>
+</div>
