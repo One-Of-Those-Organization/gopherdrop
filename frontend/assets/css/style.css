@@ -1,0 +1,139 @@
+/* ==========================================
+   GopherDrop - Custom Styles
+   ========================================== */
+
+/* CSS Variables */
+:root {
+  --primary: #00d0ff;
+  --bg-main: #f8fafc;
+  --sidebar-bg: #ffffff;
+  --card-bg: #ffffff;
+  --border-color: #e2e8f0;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+}
+
+/* Base Styles */
+body {
+  font-family: "Space Grotesk", sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+}
+
+/* Card Components */
+.light-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-border {
+  border-right: 1px solid var(--border-color);
+}
+
+.device-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.device-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 10px 15px -3px rgba(0, 208, 255, 0.1);
+}
+
+/* Custom Checkbox */
+.custom-checkbox {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.custom-checkbox:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.custom-checkbox:checked::after {
+  content: "check";
+  font-family: "Material Symbols Outlined";
+  font-size: 16px;
+  color: white;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Navigation */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  transition: all 0.2s;
+}
+
+.nav-item.active {
+  background-color: rgba(0, 208, 255, 0.1);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.nav-item:not(.active) {
+  color: var(--text-muted);
+}
+
+.nav-item:not(.active):hover {
+  background-color: #f1f5f9;
+  color: var(--text-main);
+}
+
+/* Pagination */
+.pagination-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.pagination-btn.active {
+  background-color: var(--primary);
+  color: white;
+}
+
+.pagination-btn:not(.active) {
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.pagination-btn:not(.active):hover {
+  background-color: white;
+}
+
+/* Upload Zone */
+.upload-zone {
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(226, 232, 240, 0.5);
+  transition: all 0.3s;
+}
+
+.upload-zone:hover {
+  border-color: rgba(0, 208, 255, 0.4);
+}
