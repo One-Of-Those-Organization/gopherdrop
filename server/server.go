@@ -22,17 +22,20 @@ func (s *Server)StartServer() {
 	s.App.Listen(s.Url)
 }
 
-
 func (s *Server)SetupAllEndPoint() {
+	api_pub := s.App.Group("/api/v1/")
+
 	// GET: /
 	// testing the server if its running.
-	s.App.Get("/", func (c *fiber.Ctx) error {
-		return c.SendString("Server is online")
-	})
+	SetupRoot(s)
 
-	// GET: /register
+	// POST: /api/v1/register
 	// to register from the name client provided
-	s.App.Get("/register", func (c *fiber.Ctx) error {
-		return c.SendString("WIP")
-	})
+	// - data: username: string
+	SetupRegister(s, api_pub)
+
+	// POST: /api/v1/login
+	// to login from the generated password and id
+	// - data: id: int, password string
+	SetupLogin(s, api_pub)
 }
