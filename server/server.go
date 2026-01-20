@@ -3,8 +3,10 @@ package server
 import (
 	"log"
 	"github.com/gofiber/fiber/v2"
+	"sync"
 	// jwtware "github.com/gofiber/contrib/jwt"
 	"gorm.io/gorm"
+	"time"
 )
 
 type Server struct {
@@ -12,6 +14,8 @@ type Server struct {
 	App  *fiber.App
 	DB   *gorm.DB
 	Pass string
+	Challenges map[string]time.Time
+	ChallengeMu sync.RWMutex
 }
 
 func InitServer(url string, password string) *Server {
@@ -22,6 +26,7 @@ func InitServer(url string, password string) *Server {
         App: app,
 		Url: url,
 		Pass: password,
+		Challenges: make(map[string]time.Time),
     }
 }
 
@@ -49,4 +54,19 @@ func (s *Server)SetupAllEndPoint() {
 	// to login from the generated password and id
 	// - data: id: int, password string
 	SetupLogin(s, api_pub)
+}
+
+func StartJanitor(s *Server) {
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			s.ChallengeMu.Lock()
+			for ch, expiry := range s.Challenges {
+				if time.Now().After(expiry) {
+					delete(s.Challenges, ch)
+				}
+			}
+			s.ChallengeMu.Unlock()
+		}
+	}()
 }

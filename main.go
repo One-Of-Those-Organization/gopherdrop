@@ -22,6 +22,7 @@ func main() {
     }
 
 	ser := server.InitServer(sec.Url, sec.Password)
+	server.StartJanitor(ser)
 	ser.SetupAllEndPoint()
 	ser.StartServer()
 }

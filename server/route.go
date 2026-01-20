@@ -19,8 +19,8 @@ func cret(Success bool, Message string, Data any) Ret {
 	return Ret{ Success, Message, Counter - 1, Data }
 }
 
-func resp(c *fiber.Ctx, ret Ret) error {
-	return c.Status(fiber.StatusBadRequest).JSON(ret)
+func resp(c *fiber.Ctx, ret Ret, code int) error {
+    return c.Status(code).JSON(ret)
 }
 
 func SetupRoot(s *Server) {
@@ -38,11 +38,11 @@ func SetupRegister(s *Server, group fiber.Router) {
 		}
 
 		if err := c.BodyParser(&b); err != nil {
-			return resp(c, cret(false, "Invalid body", nil))
+			return resp(c, cret(false, "Invalid body", nil), fiber.StatusBadRequest)
 		}
 
 		if b.Username == "" || b.PublicKey == "" {
-			return resp(c, cret(false, "Username and PublicKey are required", nil))
+			return resp(c, cret(false, "Username and PublicKey are required", nil), fiber.StatusBadRequest)
 		}
 
 		newUser := User{
@@ -52,21 +52,23 @@ func SetupRegister(s *Server, group fiber.Router) {
 		}
 
 		if err := s.DB.Create(&newUser).Error; err != nil {
-			return resp(c, cret(false, "Username might already exist", nil))
+			return resp(c, cret(false, "Username might already exist", nil), fiber.StatusBadRequest)
 		}
 
-		return resp(c, cret(true, "user", newUser))
+		return resp(c, cret(true, "user", newUser), fiber.StatusOK)
 	})
 }
 
 func SetupLogin(s *Server, group fiber.Router) {
-	// 1. Client asks for a challenge
+	if s.Challenges == nil { s.Challenges = make(map[string]time.Time) }
 	group.Get("/challenge", func(c *fiber.Ctx) error {
 		challenge, _ := helper.GenerateChallenge()
-		return resp(c, cret(true, "challenge", challenge))
+		s.ChallengeMu.Lock()
+		s.Challenges[challenge] = time.Now().Add(2 * time.Minute)
+		s.ChallengeMu.Unlock()
+		return resp(c, cret(true, "challenge", challenge), fiber.StatusOK)
 	})
 
-	// 2. Client sends signed challenge
 	group.Post("/login", func(c *fiber.Ctx) error {
 		var b struct {
 			Username  string `json:"username"`
@@ -75,20 +77,33 @@ func SetupLogin(s *Server, group fiber.Router) {
 		}
 
 		if err := c.BodyParser(&b); err != nil {
-			return resp(c, cret(false, "Invalid body", nil))
+			return resp(c, cret(false, "Invalid body", nil), fiber.StatusBadRequest)
+		}
+
+		s.ChallengeMu.Lock()
+		expiry, exists := s.Challenges[b.Challenge]
+		if exists {
+			delete(s.Challenges, b.Challenge)
+		}
+		s.ChallengeMu.Unlock()
+		if !exists {
+			return resp(c, cret(false, "Invalid challenge", nil), fiber.StatusBadRequest)
+		}
+		if time.Now().After(expiry) {
+			return resp(c, cret(false, "Challenge expired", nil), fiber.StatusBadRequest)
 		}
 
 		var user User
 		if err := s.DB.Where("username = ?", b.Username).First(&user).Error; err != nil {
-			return resp(c, cret(false, "User not found", nil))
+			return resp(c, cret(false, "User not found", nil), fiber.StatusBadRequest)
 		}
 
 		// Verify that the user's private key was used to sign the challenge
 		valid, err := helper.VerifySignature(user.PublicKey, b.Challenge, b.Signature)
 		if err != nil || !valid {
-			return resp(c, cret(false, "Authentication failed", nil))
+			return resp(c, cret(false, "Authentication failed", nil), fiber.StatusBadRequest)
 		}
 
-		return resp(c, cret(true, "Login success", user))
+		return resp(c, cret(true, "Login success", user), fiber.StatusOK)
 	})
 }
