@@ -28,13 +28,6 @@ func resp(c *fiber.Ctx, ret Ret, code int) error {
 	return c.Status(code).JSON(ret)
 }
 
-func SetupRoot(s *Server) {
-	s.App.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Server is online")
-	})
-
-}
-
 func SetupRegister(s *Server, group fiber.Router) {
 	group.Post("/register", func(c *fiber.Ctx) error {
 		var b struct {
@@ -128,6 +121,10 @@ func SetupLogin(s *Server, group fiber.Router) {
 
 		return resp(c, cret(true, "token", t), fiber.StatusOK)
 	})
+}
+
+func SetupStaticFrontEnd(s *Server) {
+	s.App.Static("/", "./frontend")
 }
 
 func SetupWebSocketEndPoint(s *Server, group fiber.Router) {

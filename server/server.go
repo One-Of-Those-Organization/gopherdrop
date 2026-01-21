@@ -59,8 +59,7 @@ func (s *Server) SetupAllEndPoint() {
 	}))
 
 	// GET: /
-	// testing the server if its running.
-	SetupRoot(s)
+    SetupStaticFrontEnd(s)
 
 	// POST: /api/v1/register
 	// to register from the name client provided
