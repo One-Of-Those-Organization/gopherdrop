@@ -56,7 +56,7 @@ func (s *Server) SetupAllEndPoint() {
 	//       of sign with your private key is `signature`.
 	SetupLogin(s, api_pub)
 
-	// POST: /api/v1/challenge
+	// GET: /api/v1/challenge
 	// to get challenge for logging in
 	SetupChallange(s, api_pub)
 }
