@@ -65,7 +65,9 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			sendWS(mUser.Conn, CONFIG_DISCOVERABLE, "success")
 			continue
 		case START_SHARING:
-			sendWS(mUser.Conn, USER_SHARE_LIST, nil)
+			sendWS(mUser.Conn, USER_SHARE_LIST, s.CachedUser)
+			continue
+		case USER_SHARE_TARGET:
 			continue
 		}
 	}
