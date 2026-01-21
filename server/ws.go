@@ -70,7 +70,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 
 func startJWTExpiryWatcher(c *websocket.Conn, exp time.Time, done <-chan struct{}) {
 	go func() {
-		select {
+		select { // this is switch case for channel
 		case <-time.After(time.Until(exp)):
 			_ = c.WriteMessage(
 				websocket.CloseMessage,
