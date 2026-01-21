@@ -158,7 +158,7 @@ function startTransferSimulation() {
     transferInterval = setInterval(() => {
         // Fluctuaten Speed
         currentSpeed = Math.max(10, Math.min(100, currentSpeed + (Math.random() - 0.5) * 10));
-        speedEl.textContent = `${currentSpeed.toFixed(1)} MB/s`;
+        if (speedEl) speedEl.textContent = `${currentSpeed.toFixed(1)} MB/s`;
         
         // Increment Progress
         // Simulation: files complete one by one fast
@@ -169,24 +169,26 @@ function startTransferSimulation() {
             const fill = fileItem.querySelector('.progress-fill');
             const status = fileItem.querySelector('.status-text');
             
-            // Get current width
-            let currentWidth = parseFloat(fill.style.width) || 0;
-            let increment = (currentSpeed * 0.1); // Mock increment
-            
-            if (currentWidth >= 100) {
-                // File Complete
-                fill.style.width = '100%';
-                fill.className = 'h-full bg-green-500 w-full rounded-full transition-all'; // Green
-                status.textContent = 'Complete';
-                status.className = 'text-[10px] font-bold text-green-500 uppercase tracking-tight status-text';
+            if (fill && status) {
+                // Get current width
+                let currentWidth = parseFloat(fill.style.width) || 0;
+                let increment = (currentSpeed * 0.1); // Mock increment
                 
-                currentFileIndex++;
-            } else {
-                // File Valid Updating
-                fill.style.width = `${Math.min(100, currentWidth + increment)}%`;
-                fill.className = 'h-full bg-primary w-full transition-none'; // Blue
-                status.textContent = `${Math.round(currentWidth)}%`;
-                status.className = 'text-[10px] font-bold text-primary uppercase tracking-tight status-text';
+                if (currentWidth >= 100) {
+                    // File Complete
+                    fill.style.width = '100%';
+                    fill.className = 'h-full bg-green-500 w-full rounded-full transition-all'; // Green
+                    status.textContent = 'Complete';
+                    status.className = 'text-[10px] font-bold text-green-500 uppercase tracking-tight status-text';
+                    
+                    currentFileIndex++;
+                } else {
+                    // File Valid Updating
+                    fill.style.width = `${Math.min(100, currentWidth + increment)}%`;
+                    fill.className = 'h-full bg-primary w-full transition-none'; // Blue
+                    status.textContent = `${Math.round(currentWidth)}%`;
+                    status.className = 'text-[10px] font-bold text-primary uppercase tracking-tight status-text';
+                }
             }
         }
         
@@ -196,7 +198,10 @@ function startTransferSimulation() {
         if (currentFileIndex < transferFiles.length) {
              const fileItem = document.getElementById(`file-item-${currentFileIndex}`);
              if (fileItem) {
-                 currentFilePercent = (parseFloat(fileItem.querySelector('.progress-fill').style.width) || 0) / 100;
+                 const fillEl = fileItem.querySelector('.progress-fill');
+                 if (fillEl) {
+                    currentFilePercent = (parseFloat(fillEl.style.width) || 0) / 100;
+                 }
              }
         }
         
