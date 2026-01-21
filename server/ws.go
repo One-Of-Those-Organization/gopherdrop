@@ -27,11 +27,18 @@ const (
 
 	START_TRANSACTION					// 10
 	TRANSACTION_SHARE_ACCEPT            // 11
+	WEBRTC_SIGNAL                       // 12
 )
 
 type WSMessage struct {
 	WSType WSType `json:"type"`
 	Data   any    `json:"data"`
+}
+
+type WebRTCSignal struct {
+	TransactionID string `json:"transaction_id"`
+	TargetKey     string `json:"target_key"`
+	Data          any    `json:"data"`
 }
 
 func sendWS(c *websocket.Conn, t WSType, data any) {
@@ -306,6 +313,35 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				sendWS(target.User.Conn, START_TRANSACTION, payload)
 			}
 			sendWS(mUser.Conn, START_TRANSACTION, "transaction started")
+			continue
+		case WEBRTC_SIGNAL:
+			var signal WebRTCSignal
+			if err := mapstructure.Decode(msg.Data, &signal); err != nil {
+				sendWS(mUser.Conn, ERROR, "invalid data for START_TRANSACTION")
+				continue
+			}
+			var targetUser *ManagedUser
+			s.MUserMu.RLock()
+			for _, user := range s.MUser {
+				if user.User.PublicKey == signal.TargetKey {
+					targetUser = user
+					break
+				}
+			}
+			s.MUserMu.RUnlock()
+			if targetUser == nil {
+				sendWS(mUser.Conn, ERROR, "target user not found or not connected")
+				continue
+			}
+			sendWS(targetUser.Conn, WEBRTC_SIGNAL, struct {
+				TransactionID string `json:"transaction_id"`
+				FromKey       string `json:"from_key"`
+				Data          any    `json:"data"`
+			}{
+				TransactionID: signal.TransactionID,
+				FromKey:       mUser.User.PublicKey,
+				Data:          signal.Data,
+			})
 			continue
 		}
 	}
