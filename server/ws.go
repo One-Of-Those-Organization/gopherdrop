@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
+	"github.com/mitchellh/mapstructure"
 	"time"
 )
 
@@ -18,6 +19,12 @@ const (
 	USER_SHARE_LIST // 4
 	// NOTE: sended by the client to give the pubkey of who is the user they want to sent into
 	USER_SHARE_TARGET // 5
+	// NOTE: sended by the client to give the server context what file is being sended on the transaction
+	FILE_SHARE_TARGET // 6
+	// NOTE: sended by the server to all transaction recv to give them the sender webrtc addres(for p2p)
+	START_TRANSACTION // 7
+	FILE_SHARE_ACCEPT // 8
+	FILE_DATA         // 9
 )
 
 type WSMessage struct {
@@ -108,6 +115,49 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			s.TransactionMu.Unlock()
 
 			sendWS(mUser.Conn, USER_SHARE_TARGET, txID)
+			continue
+		case FILE_SHARE_TARGET:
+			var data struct {
+				TransactionID string     `json:"transaction_id"`
+				Files         []FileInfo `json:"files"`
+			}
+			if err := mapstructure.Decode(msg.Data, &data); err != nil {
+				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_TARGET")
+				continue
+			}
+
+			if data.TransactionID == "" || len(data.Files) == 0 {
+				sendWS(mUser.Conn, ERROR, "missing transaction_id or files")
+				continue
+			}
+
+			s.TransactionMu.RLock()
+			transaction, ok := s.Transactions[data.TransactionID]
+			s.TransactionMu.RUnlock()
+
+			if !ok {
+				sendWS(mUser.Conn, ERROR, "transaction not found")
+				continue
+			}
+
+			if transaction.Sender != mUser {
+				sendWS(mUser.Conn, ERROR, "not authorized to modify this transaction")
+				continue
+			}
+
+			// Convert []FileInfo to []*FileInfo
+			files := make([]*FileInfo, len(data.Files))
+			for i := range data.Files {
+				files[i] = &data.Files[i]
+			}
+
+			s.TransactionMu.Lock()
+			transaction.Files = files
+			s.TransactionMu.Unlock()
+
+			sendWS(mUser.Conn, FILE_SHARE_TARGET, "files added to transaction")
+			continue
+		case START_TRANSACTION:
 			continue
 		}
 	}

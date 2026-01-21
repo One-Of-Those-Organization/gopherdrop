@@ -28,7 +28,14 @@ type Transaction struct {
 	ID      string         `json:"id"`
 	Sender  *ManagedUser   `json:"-"`
 	Targets []*ManagedUser `json:"-"`
+	Files   []*FileInfo    `json:"files"`
 	// TODO: add file stuff here
+}
+
+type FileInfo struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+	Type string `json:"type"`
 }
 
 type Server struct {
