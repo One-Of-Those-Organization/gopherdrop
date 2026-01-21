@@ -11,8 +11,14 @@ import (
 	"time"
 )
 
+type MinimalUser struct {
+	Username  string `json:"username"`
+	PublicKey string `json:"public_key"`
+}
+
 type ManagedUser struct {
-	User      User            `json:"user"`
+	MinUser   MinimalUser     `json:"user"`
+	User      User            `json:"-"`
 	Conn      *websocket.Conn `json:"-"`
 	JWTExpiry time.Time       `json:"-"`
 	// NOTE: will add the webrtc stuff later here
