@@ -47,20 +47,19 @@ function isRegistered() {
 // ==========================================
 // Send to Backend Functions
 // ==========================================
-// TODO : Finish this Backend Registration Function
-// try {
-//     const response = await fetch(ENDPOINTS.REGISTER, {
-//         method: 'POST',
-//         headers: { 'Content-Type': 'application/json' },
-//         body: JSON.stringify({
-//             username: getDeviceName(),
-//             public_key: getPrivateKey()
-//         })
-//     });
-//
-// } catch (e) {
-//     console.error('[Auth] Registration failed:', e);
-// }
+try {
+    const response = await fetch(ENDPOINTS.REGISTER, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            username: getDeviceName(),
+            public_key: getPrivateKey()
+        })
+    });
+    console.log('[Auth] Registration response status:', response.status);
+} catch (e) {
+    console.error('[Auth] Registration failed:', e);
+}
 
 
 //     try {
