@@ -44,20 +44,11 @@ export async function generateKeyPair() {
 }
 
 // Initialize keys
-export async function initKeys() {
-    console.log('[Auth] Generating key pair...');
-    const keyPair = await generateKeyPair();
-
-    // Export private & public key ke ArrayBuffer
+export async function savePrivateKey(keyPair) {
     const privateKeyBuffer = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-
-    // Convert ArrayBuffer ke Base64 agar bisa simpan di localStorage
     const privateKeyBase64 = bufferToBase64(privateKeyBuffer);
-
-    // Set Private Key as User Identifier
     localStorage.setItem('gdrop_private_key', privateKeyBase64);
-
-    console.log('[Auth] Keys stored in localStorage');
+    console.log('[Auth] Private key stored in localStorage');
 }
 
 export async function importPrivateKey() {
@@ -87,6 +78,7 @@ export async function initDeviceID() {
     }
 
     if (!localStorage.getItem('gdrop_device_name')) {
+        // NOTE: CHANGE THIS TO A BETTER DEFAULT NAME IF NEEDED
         const defaultName = navigator.userAgent.split(' ')[0];
         localStorage.setItem('gdrop_device_name', defaultName);
     }

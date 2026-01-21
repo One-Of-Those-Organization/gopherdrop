@@ -1,11 +1,12 @@
 // ==========================================
 // Constants and Imports
 // ==========================================
-import { bufferToBase64, base64ToBuffer, generateKeyPair, initKeys, initDeviceID } from './helper.js';
+import {bufferToBase64, base64ToBuffer, generateKeyPair, initDeviceID, savePrivateKey, importPrivateKey} from './helper.js';
 
 // LocalStorage Keys
 const STORAGE_KEYS = {
     PRIVATE_KEY: 'gdrop_private_key',
+    PUBLIC_KEY: 'gdrop_public_key',
     DEVICE_ID: 'gdrop_device_id'
 };
 
@@ -34,6 +35,10 @@ function getPrivateKey() {
     return localStorage.getItem(STORAGE_KEYS.PRIVATE_KEY);
 }
 
+function getPublicKey() {
+    return localStorage.getItem(STORAGE_KEYS.PUBLIC_KEY);
+}
+
 function getDeviceName() {
     return localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
 }
@@ -42,74 +47,6 @@ function isRegistered() {
     const hasPrivateKey = getPrivateKey();
     const hasDeviceID = getDeviceName();
     return hasPrivateKey && hasDeviceID;
-}
-
-// ==========================================
-// Send to Backend Functions
-// ==========================================
-const publicKeyBuffer  = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
-const publicKeyBase64  = bufferToBase64(publicKeyBuffer);
-try {
-    const response = await fetch(ENDPOINTS.REGISTER, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: getDeviceName(),
-            public_key: publicKeyBase64
-        })
-    });
-    console.log('[Auth] Registration response status:', response.status);
-} catch (e) {
-    console.error('[Auth] Registration failed:', e);
-}
-
-async function autoLogin() {
-    const deviceID = getDeviceName();
-    const privateKey = getPrivateKey();
-
-    if (!deviceID || !privateKey) {
-        return {
-            success: false,
-            error: 'No stored credentials'
-        };
-    }
-
-    try {
-        // 1. Get Challenge from server
-        const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
-        const challengeData = await challengeRes.json();
-        const challengeBase64 = challengeData.data;
-
-        console.log('[Auth] Received challenge:', challengeBase64.substring(0, 20) + '...');
-
-        // 2. Sign the challenge
-        const importedKey = await importPrivateKey();
-        const signature = await signChallenge(challengeBase64, importedKey);
-
-        console.log('[Auth] Challenge signed');
-
-        // 3. Send login request
-        const loginRes = await fetch(ENDPOINTS.LOGIN, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: deviceID,
-                challenge: challengeBase64,
-                signature: signature
-            })
-        });
-
-        const loginData = await loginRes.json();
-
-        if (loginRes.ok) {
-            console.log('[Auth] Auto-login successful');
-        }
-
-        return { success: loginRes.ok, data: loginData };
-    } catch (error) {
-        console.error('[Auth] Auto-login failed:', error);
-        return { success: false, error: error.message };
-    }
 }
 
 // ==========================================
@@ -123,38 +60,74 @@ function clearCredentials() {
 }
 
 // ==========================================
-// Initialization
-// ==========================================
-async function initAuth() {
-    console.log('[Auth] Initializing...');
-
-    if (isRegistered()) {
-        console.log('[Auth] Device is registered:', localStorage.getItem(STORAGE_KEYS.DEVICE_ID));
-        const result = await autoLogin();
-        if (!result.success) {
-            console.log('[Auth] Auto-login failed, but local keys exist');
-        }
-    } else {
-        console.log('[Auth] Device not registered');
-    }
-}
-
-// ==========================================
-// DOM Content Loaded Initialization
+// DOM Content Loaded Initialization with Auto-Registration
 // ==========================================
 document.addEventListener('DOMContentLoaded', async() => {
-    let privateKey= getPrivateKey();
-    let deviceID= getDeviceName();
-    console.log('Private Key:', privateKey);
+    let privateKey = getPrivateKey();
+    let deviceID = getDeviceName();
 
-    // Generate keys if not present
+    // Kalau belum ada kunci, generate dan registrasi
     if (!privateKey || !deviceID) {
-        await initKeys()
-        await initDeviceID()
-    } else {
-        console.log('[Auth] Device already has keys.');
-    }
+        const generatedKeyPair = await generateKeyPair();
 
-    // Initialize authentication
-    await initAuth()
+        await savePrivateKey(generatedKeyPair);
+
+        const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', generatedKeyPair.publicKey);
+        const publicKeyBase64 = bufferToBase64(publicKeyBuffer);
+        localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, publicKeyBase64);
+
+        await initDeviceID();
+
+        try {
+            const response = await fetch(ENDPOINTS.REGISTER, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: getDeviceName(),
+                    public_key: publicKeyBase64
+                })
+            });
+        } catch (e) {
+            console.error('[Auth] Registration failed:', e);
+        }
+    } else {
+        const publicKey = getPublicKey();
+        const privateKey = getPrivateKey();
+
+        if (!publicKey || !privateKey) {
+            return {
+                success: false,
+                error: 'No stored credentials'
+            };
+        }
+
+        try {
+            // 1. Get Challenge from server
+            const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
+            const challengeData = await challengeRes.json();
+            const challengeBase64 = challengeData.data;
+
+            // 2. Sign the challenge
+            const importedKey = await importPrivateKey();
+            const signature = await signChallenge(challengeBase64, importedKey);
+
+            // 3. Send login request
+            const loginRes = await fetch(ENDPOINTS.LOGIN, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    public_key: publicKey,
+                    challenge: challengeBase64,
+                    signature: signature
+                })
+            });
+
+            const loginData = await loginRes.json();
+
+            return { success: loginRes.ok, data: loginData };
+        } catch (error) {
+            console.error('[Auth] Auto-login failed:', error);
+            return { success: false, error: error.message };
+        }
+    }
 });
