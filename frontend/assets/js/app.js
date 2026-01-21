@@ -37,6 +37,11 @@ async function initializeApp() {
     // Load upload zone (only if container exists)
     await loadComponent('upload-zone-container', 'components/upload-zone.html');
     
+    // Initialize file upload after upload-zone is loaded
+    if (typeof initFileUpload === 'function') {
+        initFileUpload();
+    }
+    
     // Highlight active nav item
     highlightActiveNav();
     
