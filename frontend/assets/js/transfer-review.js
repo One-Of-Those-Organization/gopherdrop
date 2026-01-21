@@ -283,33 +283,21 @@ function cancelTransfer() {
 /**
  * Confirm and Send
  */
-async function confirmSend() {
+/**
+ * Confirm and Send
+ */
+function confirmSend() {
     if (selectedDevices.length === 0) {
         alert("No devices selected!");
         return;
     }
     
-    // Here we would trigger the actual transfer process
-    console.log('Starting transfer...', {
-        files: selectedFiles,
-        devices: selectedDevices
-    });
+    // Ensure data is saved
+    sessionStorage.setItem('gdrop_transfer_files', JSON.stringify(selectedFiles));
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
     
-    const btn = document.querySelector('.pulse-btn');
-    const originalText = btn.innerHTML;
-    
-    btn.disabled = true;
-    btn.innerHTML = `<span class="material-symbols-outlined animate-spin">refresh</span> Sending...`;
-    
-    // Simulate delay
-    setTimeout(() => {
-        alert(`Transfer started to ${selectedDevices.length} devices!`);
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-        
-        // Maybe redirect to a "Transfer Progress" page or back to home
-        window.location.href = '../index.html';
-    }, 1500);
+    // Redirect to progress page
+    window.location.href = 'transfer-progress.html';
 }
 
 // Reuse helpers
