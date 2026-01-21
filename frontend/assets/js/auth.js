@@ -65,6 +65,62 @@ export function getToken() {
 }
 
 // ==========================================
+// Core Login Logic
+// ==========================================
+export async function performLogin() {
+    const publicKey = getPublicKey();
+    const privateKey = getPrivateKey();
+
+    if (!publicKey || !privateKey) {
+        console.warn('[Auth] Missing credentials for login');
+        return {
+            success: false,
+            error: 'No stored credentials'
+        };
+    }
+
+    try {
+        console.log('[Auth] Starting login...');
+        // 1. Get Challenge from server
+        const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
+        const challengeData = await challengeRes.json();
+        const challengeBase64 = challengeData.data;
+
+        // 2. Sign the challenge
+        const importedKey = await importPrivateKey();
+        const signature = await signChallenge(challengeBase64, importedKey);
+
+        // 3. Send login request
+        const loginRes = await fetch(ENDPOINTS.LOGIN, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                public_key: publicKey,
+                challenge: challengeBase64,
+                signature: signature
+            })
+        });
+
+        const loginData = await loginRes.json();
+
+        // Store token globally or in storage for WebSocket use
+        if (loginData.success && loginData.data && loginData.data.token) {
+            localStorage.setItem('gdrop_token', loginData.data.token);
+            // Trigger global event that auth is ready
+            console.log('[Auth] Login successful. Token saved.');
+            window.dispatchEvent(new CustomEvent('gdrop:auth-ready', { detail: { token: loginData.data.token } }));
+        } else {
+            console.warn('[Auth] Login failed or no token returned:', loginData);
+        }
+
+        return { success: loginRes.ok, data: loginData };
+    } catch (error) {
+        console.error('[Auth] Login error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ==========================================
 // DOM Content Loaded Initialization with Auto-Registration
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -73,18 +129,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Kalau belum ada kunci, generate dan registrasi
     if (!privateKey || !deviceID) {
-        const generatedKeyPair = await generateKeyPair();
-
-        await savePrivateKey(generatedKeyPair);
-
-        const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', generatedKeyPair.publicKey);
-        const publicKeyBase64 = bufferToBase64(publicKeyBuffer);
-        localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, publicKeyBase64);
-
-        await initDeviceID();
-
         try {
-            const response = await fetch(ENDPOINTS.REGISTER, {
+            const generatedKeyPair = await generateKeyPair();
+            await savePrivateKey(generatedKeyPair);
+
+            const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', generatedKeyPair.publicKey);
+            const publicKeyBase64 = bufferToBase64(publicKeyBuffer);
+            localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, publicKeyBase64);
+
+            await initDeviceID();
+
+            const registerRes = await fetch(ENDPOINTS.REGISTER, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -92,54 +147,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                     public_key: publicKeyBase64
                 })
             });
-        } catch (e) {
-            console.error('[Auth] Registration failed:', e);
-        }
-    } else {
-        const publicKey = getPublicKey();
-        const privateKey = getPrivateKey();
 
-        if (!publicKey || !privateKey) {
-            return {
-                success: false,
-                error: 'No stored credentials'
-            };
-        }
-
-        try {
-            // 1. Get Challenge from server
-            const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
-            const challengeData = await challengeRes.json();
-            const challengeBase64 = challengeData.data;
-
-            // 2. Sign the challenge
-            const importedKey = await importPrivateKey();
-            const signature = await signChallenge(challengeBase64, importedKey);
-
-            // 3. Send login request
-            const loginRes = await fetch(ENDPOINTS.LOGIN, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    public_key: publicKey,
-                    challenge: challengeBase64,
-                    signature: signature
-                })
-            });
-
-            const loginData = await loginRes.json();
-
-            // Store token globally or in storage for WebSocket use
-            if (loginData.success && loginData.data && loginData.data.token) {
-                localStorage.setItem('gdrop_token', loginData.data.token);
-                // Trigger global event that auth is ready
-                window.dispatchEvent(new CustomEvent('gdrop:auth-ready', { detail: { token: loginData.data.token } }));
+            if (registerRes.ok) {
+                console.log('[Auth] Registration successful via API. Now logging in...');
+                await performLogin();
+            } else {
+                console.error('[Auth] Registration API returned error', await registerRes.text());
             }
 
-            return { success: loginRes.ok, data: loginData };
-        } catch (error) {
-            console.error('[Auth] Auto-login failed:', error);
-            return { success: false, error: error.message };
+        } catch (e) {
+            console.error('[Auth] Registration process failed:', e);
         }
+    } else {
+        // Already registered, just login
+        await performLogin();
     }
 });
