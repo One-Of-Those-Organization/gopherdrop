@@ -54,6 +54,7 @@ func SetupRegister(s *Server, group fiber.Router) {
 			Username:  b.Username,
 			PublicKey: b.PublicKey,
 			CreatedAt: time.Now(),
+			IsDiscoverable: true,
 		}
 
 		if err := s.DB.Create(&newUser).Error; err != nil {
@@ -129,7 +130,7 @@ func SetupLogin(s *Server, group fiber.Router) {
 	})
 }
 
-func SetupWebSocketEndPoint(_ *Server, group fiber.Router) {
+func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 	group.Use("/ws", helper.WebSocketJWTGate)
 	group.Get("/ws", websocket.New(func(conn *websocket.Conn) {
 		defer conn.Close()
@@ -140,21 +141,23 @@ func SetupWebSocketEndPoint(_ *Server, group fiber.Router) {
 			return
 		}
 
-		log.Println("WS connected user:", claims["username"])
+		pubkey:= claims["public_key"].(string)
 
-		for {
-			mt, msg, err := conn.ReadMessage()
-			if err != nil {
-				log.Println("read error:", err)
-				break
-			}
-
-			log.Printf("recv: %s\n", msg)
-
-			if err := conn.WriteMessage(mt, msg); err != nil {
-				log.Println("write error:", err)
-				break
-			}
+		var user User
+		if err := s.DB.Where("public_key = ?", pubkey).First(&user).Error; err != nil {
+			log.Println("invalid JWT")
+			return
 		}
+
+		s.MUserMu.Lock()
+		muser := ManagedUser{
+			User: user,
+			Conn: conn,
+		}
+		s.MUser[conn] = muser
+		s.MUserMu.Unlock()
+
+		log.Println("WS connected user:", claims["username"])
+		HandleWS(s, &muser)
 	}))
 }

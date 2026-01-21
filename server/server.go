@@ -6,8 +6,15 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"sync"
+	"github.com/gofiber/websocket/v2"
 	"time"
 )
+
+type ManagedUser struct {
+	User User
+	Conn *websocket.Conn
+	// NOTE: will add the webrtc stuff later here
+}
 
 type Server struct {
 	Url         string
@@ -16,6 +23,8 @@ type Server struct {
 	Pass        string
 	Challenges  map[string]time.Time
 	ChallengeMu sync.RWMutex
+    MUser       map[*websocket.Conn]ManagedUser
+	MUserMu     sync.RWMutex
 }
 
 func InitServer(url string, password string) *Server {
@@ -27,6 +36,7 @@ func InitServer(url string, password string) *Server {
 		Url:        url,
 		Pass:       password,
 		Challenges: make(map[string]time.Time),
+		MUser:      make(map[*websocket.Conn]ManagedUser),
 	}
 }
 

@@ -91,3 +91,8 @@ func WebSocketJWTGate(c *fiber.Ctx) error {
 
 	return fiber.ErrUpgradeRequired
 }
+
+func WrapBase64(value string) string {
+    str := base64.StdEncoding.EncodeToString([]byte(value))
+    return str
+}
