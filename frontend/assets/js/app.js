@@ -2,6 +2,10 @@
  * GopherDrop - Main Application
  */
 
+// Global WebSocket Connection
+let signalingSocket = null;
+let isSocketConnected = false;
+
 // Detect base path based on current location
 function getBasePath() {
     const path = window.location.pathname;
@@ -16,7 +20,7 @@ function getBasePath() {
 async function loadComponent(elementId, componentPath) {
     const container = document.getElementById(elementId);
     if (!container) return;
-    
+
     try {
         const basePath = getBasePath();
         const fullPath = basePath + componentPath;
@@ -33,21 +37,27 @@ async function loadComponent(elementId, componentPath) {
 async function initializeApp() {
     // Load sidebar
     await loadComponent('sidebar-container', 'components/sidebar.html');
-    
+
     // Load upload zone (only if container exists)
     await loadComponent('upload-zone-container', 'components/upload-zone.html');
-    
+
     // Initialize file upload after upload-zone is loaded
     if (typeof initFileUpload === 'function') {
         initFileUpload();
     }
-    
+
     // Highlight active nav item
     highlightActiveNav();
-    
+
     // Initialize devices (only if function exists and container exists)
     if (typeof renderDevices === 'function' && document.getElementById('device-list')) {
         renderDevices(sampleDevices, 'device-list');
+    }
+
+    // Check for existing token and connect if available
+    const token = localStorage.getItem('gdrop_token');
+    if (token) {
+        connectToSignalingServer(token);
     }
 }
 
@@ -55,7 +65,7 @@ async function initializeApp() {
 function highlightActiveNav() {
     const currentPath = window.location.pathname;
     const navItems = document.querySelectorAll('.nav-item');
-    
+
     navItems.forEach(item => {
         const href = item.getAttribute('href');
         // Check if href matches current page
@@ -70,6 +80,94 @@ function highlightActiveNav() {
         }
     });
 }
+
+// ==========================================
+// WebSocket & Signaling Logic
+// ==========================================
+
+function connectToSignalingServer(token) {
+    if (signalingSocket && (signalingSocket.readyState === WebSocket.OPEN || signalingSocket.readyState === WebSocket.CONNECTING)) {
+        console.log('[WS] Already connected or connecting');
+        return;
+    }
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Use localhost:8080 if running locally, otherwise relative path might fail if ports differ
+    const wsUrl = `ws://localhost:8080/api/v1/protected/ws?token=${token}`;
+
+    console.log('[WS] Connecting to:', wsUrl);
+
+    signalingSocket = new WebSocket(wsUrl);
+
+    signalingSocket.onopen = () => {
+        console.log('[WS] Connected');
+        isSocketConnected = true;
+    };
+
+    signalingSocket.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            handleSignalingMessage(msg);
+        } catch (e) {
+            console.error('[WS] Failed to parse message:', e);
+        }
+    };
+
+    signalingSocket.onerror = (error) => {
+        console.error('[WS] Error:', error);
+    };
+
+    signalingSocket.onclose = () => {
+        console.log('[WS] Disconnected');
+        isSocketConnected = false;
+        signalingSocket = null;
+        // Optionally retry connection here
+    };
+}
+
+function handleSignalingMessage(msg) {
+    console.log('[WS] Received:', msg);
+
+    switch (msg.type) {
+        case 2: // CONFIG_DISCOVERABLE
+            console.log('[WS] Discoverable status update:', msg.data);
+            // Verify success if needed
+            break;
+        case 4: // USER_SHARE_LIST
+            // TODO: Update device list logic
+            break;
+        case 1: // ERROR
+            console.error('[WS] Server error:', msg.data);
+            break;
+    }
+}
+
+// Set Discoverable Status (called from Settings page)
+function setDiscoverable(isDiscoverable) {
+    if (!signalingSocket || signalingSocket.readyState !== WebSocket.OPEN) {
+        console.error('[WS] Not connected');
+        return;
+    }
+
+    // Type 2 = CONFIG_DISCOVERABLE
+    const msg = {
+        type: 2,
+        data: isDiscoverable
+    };
+
+    signalingSocket.send(JSON.stringify(msg));
+    console.log('[WS] Sent discoverable config:', isDiscoverable);
+}
+
+// Expose setDiscoverable to global scope for HTML onclick
+window.setDiscoverable = setDiscoverable;
+
+// Listen for auth ready event from auth.js
+window.addEventListener('gdrop:auth-ready', (e) => {
+    if (e.detail && e.detail.token) {
+        connectToSignalingServer(e.detail.token);
+    }
+});
 
 // Run on DOM Ready
 document.addEventListener('DOMContentLoaded', initializeApp);

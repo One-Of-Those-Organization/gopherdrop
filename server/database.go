@@ -1,7 +1,7 @@
 package server
 
 import (
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"log"
 	"time"

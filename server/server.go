@@ -1,7 +1,7 @@
 package server
 
 import (
-	jwtware "github.com/gofiber/contrib/jwt"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/websocket/v2"
@@ -50,40 +50,11 @@ func InitServer(url string, password string) *Server {
 }
 
 func (s *Server) StartServer() {
-	log.Printf("Server started at: %s\n", s.Url)
+	log.Printf("Server started at: %s\nAccess via: http://localhost:8080\n", s.Url)
 	s.App.Listen(s.Url)
 }
 
-func (s *Server) SetupAllEndPoint() {
-	api_pub := s.App.Group("/api/v1/")
-	protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
-		SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
-	}))
 
-	// GET: /
-	SetupStaticFrontEnd(s)
-
-	// POST: /api/v1/register
-	// to register from the name client provided
-	// - data: username: string
-	SetupRegister(s, api_pub)
-
-	// POST: /api/v1/login
-	// to login from the generated password and id
-	// - data: public_key string, challenge string, signature string
-	// NOTE: the challenge is the exact same stuff you got from the `SetupChallenge` and the result
-	//       of sign with your private key is `signature`.
-	SetupLogin(s, api_pub)
-
-	// GET: /api/v1/challenge
-	// to get challenge for logging in
-	SetupChallange(s, api_pub)
-
-	// GET: /api/v1/protected/ws
-	// to upgrade the connection to websocket for later
-	// use (listing all the near ppl, conn to webrtc)
-	SetupWebSocketEndPoint(s, protected)
-}
 
 func StartJanitor(s *Server) {
 	go func() {

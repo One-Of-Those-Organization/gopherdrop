@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -123,6 +124,33 @@ func SetupLogin(s *Server, group fiber.Router) {
 	})
 }
 
+func SetupUpdateProfile(s *Server, group fiber.Router) {
+    group.Post("/user", func(c *fiber.Ctx) error {
+        userToken := c.Locals("user").(*jwt.Token)
+        claims := userToken.Claims.(jwt.MapClaims)
+        pubKey := claims["public_key"].(string)
+
+        var b struct {
+            Username string `json:"username"`
+        }
+
+        if err := c.BodyParser(&b); err != nil {
+            return resp(c, cret(false, "Invalid body", nil), fiber.StatusBadRequest)
+        }
+
+        if b.Username == "" {
+             return resp(c, cret(false, "Username is required", nil), fiber.StatusBadRequest)
+        }
+
+
+        if err := s.DB.Model(&User{}).Where("public_key = ?", pubKey).Update("username", b.Username).Error; err != nil {
+             return resp(c, cret(false, "Failed to update profile", nil), fiber.StatusInternalServerError)
+        }
+        
+        return resp(c, cret(true, "Profile updated", nil), fiber.StatusOK)
+    })
+}
+
 func SetupStaticFrontEnd(s *Server) {
 	s.App.Static("/", "./frontend")
 }
@@ -176,4 +204,40 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		log.Println("WS connected user:", claims["username"])
 		HandleWS(s, muser)
 	}))
+}
+
+func (s *Server) SetupAllEndPoint() {
+	api_pub := s.App.Group("/api/v1/")
+	protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
+		SigningKey:  jwtware.SigningKey{Key: []byte(s.Pass)},
+		TokenLookup: "header:Authorization,query:token",
+	}))
+
+	// GET: /
+	SetupStaticFrontEnd(s)
+
+	// POST: /api/v1/register
+	// to register from the name client provided
+	// - data: username: string
+	SetupRegister(s, api_pub)
+
+	// POST: /api/v1/login
+	// to login from the generated password and id
+	// - data: public_key string, challenge string, signature string
+	// NOTE: the challenge is the exact same stuff you got from the `SetupChallenge` and the result
+	//       of sign with your private key is `signature`.
+	SetupLogin(s, api_pub)
+
+	// GET: /api/v1/challenge
+	// to get challenge for logging in
+	SetupChallange(s, api_pub)
+
+    // POST: /api/v1/protected/user
+    // Update user profile (username)
+    SetupUpdateProfile(s, protected)
+
+	// GET: /api/v1/protected/ws
+	// to upgrade the connection to websocket for later
+	// use (listing all the near ppl, conn to webrtc)
+	SetupWebSocketEndPoint(s, protected)
 }

@@ -1,7 +1,7 @@
 // ==========================================
 // Constants and Imports
 // ==========================================
-import {bufferToBase64, base64ToBuffer, generateKeyPair, initDeviceID, savePrivateKey, importPrivateKey} from './helper.js';
+import { bufferToBase64, base64ToBuffer, generateKeyPair, initDeviceID, savePrivateKey, importPrivateKey } from './helper.js';
 
 // LocalStorage Keys
 const STORAGE_KEYS = {
@@ -59,10 +59,15 @@ function clearCredentials() {
     console.log('[Auth] All credentials cleared');
 }
 
+// Export getToken function
+export function getToken() {
+    return localStorage.getItem('gdrop_token'); // Or manage in memory
+}
+
 // ==========================================
 // DOM Content Loaded Initialization with Auto-Registration
 // ==========================================
-document.addEventListener('DOMContentLoaded', async() => {
+document.addEventListener('DOMContentLoaded', async () => {
     let privateKey = getPrivateKey();
     let deviceID = getDeviceName();
 
@@ -81,7 +86,7 @@ document.addEventListener('DOMContentLoaded', async() => {
         try {
             const response = await fetch(ENDPOINTS.REGISTER, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     username: getDeviceName(),
                     public_key: publicKeyBase64
@@ -123,6 +128,13 @@ document.addEventListener('DOMContentLoaded', async() => {
             });
 
             const loginData = await loginRes.json();
+
+            // Store token globally or in storage for WebSocket use
+            if (loginData.success && loginData.data && loginData.data.token) {
+                localStorage.setItem('gdrop_token', loginData.data.token);
+                // Trigger global event that auth is ready
+                window.dispatchEvent(new CustomEvent('gdrop:auth-ready', { detail: { token: loginData.data.token } }));
+            }
 
             return { success: loginRes.ok, data: loginData };
         } catch (error) {
