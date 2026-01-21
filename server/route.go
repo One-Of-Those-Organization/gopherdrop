@@ -78,7 +78,7 @@ func SetupChallange(s *Server, group fiber.Router) {
 func SetupLogin(s *Server, group fiber.Router) {
 	group.Post("/login", func(c *fiber.Ctx) error {
 		var b struct {
-			Username  string `json:"username"`
+			PubKey    string `json:"public_key"`
 			Challenge string `json:"challenge"`
 			Signature string `json:"signature"`
 		}
@@ -101,7 +101,7 @@ func SetupLogin(s *Server, group fiber.Router) {
 		}
 
 		var user User
-		if err := s.DB.Where("username = ?", b.Username).First(&user).Error; err != nil {
+		if err := s.DB.Where("public_key = ?", b.PubKey).First(&user).Error; err != nil {
 			return resp(c, cret(false, "User not found", nil), fiber.StatusBadRequest)
 		}
 

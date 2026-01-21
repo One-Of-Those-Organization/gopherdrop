@@ -51,7 +51,7 @@ func (s *Server) SetupAllEndPoint() {
 
 	// POST: /api/v1/login
 	// to login from the generated password and id
-	// - data: id: int, challenge string, signature string
+	// - data: public_key string, challenge string, signature string
 	// NOTE: the challenge is the exact same stuff you got from the `SetupChallenge` and the result
 	//       of sign with your private key is `signature`.
 	SetupLogin(s, api_pub)
