@@ -24,16 +24,25 @@ type ManagedUser struct {
 	// NOTE: will add the webrtc stuff later here
 }
 
+type Transaction struct {
+	ID      string         `json:"id"`
+	Sender  *ManagedUser   `json:"-"`
+	Targets []*ManagedUser `json:"-"`
+	// TODO: add file stuff here
+}
+
 type Server struct {
-	Url         string
-	App         *fiber.App
-	DB          *gorm.DB
-	Pass        string
-	Challenges  map[string]time.Time
-	ChallengeMu sync.RWMutex
-	MUser       map[*websocket.Conn]*ManagedUser
-	MUserMu     sync.RWMutex
-	CachedUser  []*ManagedUser
+	Url           string
+	App           *fiber.App
+	DB            *gorm.DB
+	Pass          string
+	Challenges    map[string]time.Time
+	ChallengeMu   sync.RWMutex
+	MUser         map[*websocket.Conn]*ManagedUser
+	MUserMu       sync.RWMutex
+	CachedUser    []*ManagedUser
+	Transactions  map[string]*Transaction
+	TransactionMu sync.RWMutex
 }
 
 func InitServer(url string, password string) *Server {
@@ -47,11 +56,12 @@ func InitServer(url string, password string) *Server {
 		AllowCredentials: false,
 	}))
 	return &Server{
-		App:        app,
-		Url:        url,
-		Pass:       password,
-		Challenges: make(map[string]time.Time),
-		MUser:      make(map[*websocket.Conn]*ManagedUser),
+		App:          app,
+		Url:          url,
+		Pass:         password,
+		Challenges:   make(map[string]time.Time),
+		MUser:        make(map[*websocket.Conn]*ManagedUser),
+		Transactions: make(map[string]*Transaction),
 	}
 }
 

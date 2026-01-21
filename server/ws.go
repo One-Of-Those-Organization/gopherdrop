@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/gofiber/websocket/v2"
+	"github.com/google/uuid"
 	"time"
 )
 
@@ -68,6 +69,45 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			sendWS(mUser.Conn, USER_SHARE_LIST, s.CachedUser)
 			continue
 		case USER_SHARE_TARGET:
+			targetKeys, ok := msg.Data.([]any)
+			if !ok {
+				sendWS(mUser.Conn, ERROR, "invalid data for USER_SHARE_TARGET")
+				continue
+			}
+
+			var targets []*ManagedUser
+			s.MUserMu.RLock()
+			for _, key := range targetKeys {
+				keyStr, ok := key.(string)
+				if !ok {
+					continue
+				}
+				for _, managedUser := range s.MUser {
+					if managedUser.User.PublicKey == keyStr {
+						targets = append(targets, managedUser)
+						break
+					}
+				}
+			}
+			s.MUserMu.RUnlock()
+
+			if len(targets) == 0 {
+				sendWS(mUser.Conn, ERROR, "no valid target users found")
+				continue
+			}
+
+			txID := uuid.New().String()
+			transaction := &Transaction{
+				ID:      txID,
+				Sender:  mUser,
+				Targets: targets,
+			}
+
+			s.TransactionMu.Lock()
+			s.Transactions[txID] = transaction
+			s.TransactionMu.Unlock()
+
+			sendWS(mUser.Conn, USER_SHARE_TARGET, txID)
 			continue
 		}
 	}
