@@ -26,8 +26,7 @@ const (
 	FILE_SHARE_TARGET					// 9
 
 	START_TRANSACTION					// 10
-	FILE_SHARE_ACCEPT					// 11
-	FILE_DATA							// 12
+	TRANSACTION_SHARE_ACCEPT            // 11
 )
 
 type WSMessage struct {
@@ -89,7 +88,18 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			s.TransactionMu.Lock()
 			s.Transactions[txID] = transaction
 			s.TransactionMu.Unlock()
-			sendWS(mUser.Conn, USER_SHARE_TARGET, transaction)
+			sendWS(mUser.Conn, USER_SHARE_TARGET, transaction.ID)
+			continue
+		case INFO_TRANSACTION:
+			n, ok := msg.Data.(string)
+			if !ok {
+				sendWS(mUser.Conn, ERROR, "invalid websocket message")
+				continue
+			}
+
+			s.TransactionMu.RLock()
+			sendWS(mUser.Conn, USER_SHARE_TARGET, s.Transactions[n])
+			s.TransactionMu.RUnlock()
 			continue
 		case DELETE_TRANSACTION:
 			var valid bool = true
@@ -136,6 +146,11 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				continue
 			}
 
+			if mUser != s.Transactions[data.TransactionID].Sender {
+				sendWS(mUser.Conn, ERROR, "not authorized to modify this transaction")
+				continue
+			}
+
 			var targets []*TransactionTarget
 			s.MUserMu.RLock()
 			for _, key := range data.PublicKey {
@@ -160,9 +175,9 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			// Notify targets
 			s.TransactionMu.RLock()
 			for _, target := range targets {
-				sendWS(target.User.Conn, FILE_SHARE_ACCEPT, struct {
+				sendWS(target.User.Conn, TRANSACTION_SHARE_ACCEPT, struct {
 					Transaction *Transaction `json:"transaction"`
-					Sender      string      `json:"sender"`
+					Sender      string       `json:"sender"`
 				}{
 					Transaction: s.Transactions[data.TransactionID],
 					Sender:      mUser.MinUser.Username,
@@ -213,7 +228,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 
 			sendWS(mUser.Conn, FILE_SHARE_TARGET, "files added to transaction")
 			continue
-		case FILE_SHARE_ACCEPT:
+		case TRANSACTION_SHARE_ACCEPT:
 			var data struct {
 				TransactionID string `json:"transaction_id"`
 				Accept        bool   `json:"accept"`
@@ -243,7 +258,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				}
 			}
 
-			sendWS(mUser.Conn, FILE_SHARE_ACCEPT, "response recorded")
+			sendWS(mUser.Conn, TRANSACTION_SHARE_ACCEPT, "response recorded")
 			continue
 
 		// NOTE: not done yet but impl the transaction rejected stuff
