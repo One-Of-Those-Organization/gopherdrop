@@ -29,6 +29,7 @@ type Transaction struct {
 	Sender  *ManagedUser         `json:"-"`
 	Targets []*TransactionTarget `json:"-"`
 	Files   []*FileInfo          `json:"files"`
+	Started bool                 `json:"started"`
 }
 
 type TargetStatus int

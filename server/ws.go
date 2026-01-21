@@ -89,7 +89,8 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				ID:      txID,
 				Sender:  mUser,
 				Targets: nil,
-				Files: nil,
+				Files:   nil,
+				Started: false,
 			}
 
 			s.TransactionMu.Lock()
@@ -268,7 +269,6 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			sendWS(mUser.Conn, TRANSACTION_SHARE_ACCEPT, "response recorded")
 			continue
 
-		// NOTE: not done yet but impl the transaction rejected stuff
 		case START_TRANSACTION:
 			var data struct {
 				TransactionID string `json:"transaction_id"`
@@ -298,6 +298,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				}
 			}
 			tx.Targets = acceptedTargets
+			tx.Started = true
 
 			payload := struct {
 				TransactionID string      `json:"transaction_id"`
