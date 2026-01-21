@@ -44,9 +44,9 @@ func SetupRegister(s *Server, group fiber.Router) {
 		}
 
 		newUser := User{
-			Username:  b.Username,
-			PublicKey: b.PublicKey,
-			CreatedAt: time.Now(),
+			Username:       b.Username,
+			PublicKey:      b.PublicKey,
+			CreatedAt:      time.Now(),
 			IsDiscoverable: true,
 		}
 
@@ -136,7 +136,7 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 			return
 		}
 
-		pubkey:= claims["public_key"].(string)
+		pubkey := claims["public_key"].(string)
 		expUnix := int64(claims["exp"].(float64))
 		expTime := time.Unix(expUnix, 0)
 
@@ -147,22 +147,33 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		}
 
 		s.MUserMu.Lock()
-		muser := ManagedUser{
-			User: user,
-			Conn: conn,
+
+		muser := &ManagedUser{
+			User:      user,
+			Conn:      conn,
 			JWTExpiry: expTime,
 		}
-		s.MUser[conn] = muser
+        s.MUser[conn] = muser
+
+		if len(s.CachedUser) <= 0 {
+			CacheDiscoverableUser(s)
+		} else {
+			AddCachedUser(s, muser)
+		}
+
 		s.MUserMu.Unlock()
 
 		defer func() {
 			s.MUserMu.Lock()
-	        delete(s.MUser, conn)
-	        s.MUserMu.Unlock()
-	        log.Println("WS disconnected user:", claims["username"])
+
+			DelCachedUser(s, s.MUser[conn].User.ID)
+			delete(s.MUser, conn)
+
+			s.MUserMu.Unlock()
+			log.Println("WS disconnected user:", claims["username"])
 		}()
 
 		log.Println("WS connected user:", claims["username"])
-		HandleWS(s, &muser)
+		HandleWS(s, muser)
 	}))
 }

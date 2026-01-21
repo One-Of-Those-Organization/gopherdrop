@@ -1,27 +1,27 @@
 package server
 
 import (
-	"time"
 	"github.com/gofiber/websocket/v2"
+	"time"
 )
 
 type WSType int
 
 const (
-	NONE WSType = iota  // 0
-	ERROR				// 1
-	CONFIG_DISCOVERABLE // 2
+	NONE                WSType = iota // 0
+	ERROR                             // 1
+	CONFIG_DISCOVERABLE               // 2
 	// NOTE: sended by the client when they ready to share
-	START_SHARING		// 3
+	START_SHARING // 3
 	// NOTE: sended by the server the list of discoverable user
-	USER_SHARE_LIST		// 4
+	USER_SHARE_LIST // 4
 	// NOTE: sended by the client to give the pubkey of who is the user they want to sent into
-	USER_SHARE_TARGET	// 5
+	USER_SHARE_TARGET // 5
 )
 
 type WSMessage struct {
-	WSType    WSType `json:"type"`
-	Data      any    `json:"data"`
+	WSType WSType `json:"type"`
+	Data   any    `json:"data"`
 }
 
 func sendWS(c *websocket.Conn, t WSType, data any) {
@@ -36,14 +36,14 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 	defer close(done)
 
 	startJWTExpiryWatcher(mUser.Conn, mUser.JWTExpiry, done)
-    for {
+	for {
 		// TODO: when the JWT expired then error out or disconnect this connection
-        var msg WSMessage
-        if err := mUser.Conn.ReadJSON(&msg); err != nil {
-            break
-        }
+		var msg WSMessage
+		if err := mUser.Conn.ReadJSON(&msg); err != nil {
+			break
+		}
 
-        switch msg.WSType {
+		switch msg.WSType {
 		case CONFIG_DISCOVERABLE:
 			n, ok := msg.Data.(bool)
 			if !ok {
@@ -64,8 +64,11 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			}
 			sendWS(mUser.Conn, CONFIG_DISCOVERABLE, "success")
 			continue
-        }
-    }
+		case START_SHARING:
+			sendWS(mUser.Conn, USER_SHARE_LIST, nil)
+			continue
+		}
+	}
 }
 
 func startJWTExpiryWatcher(c *websocket.Conn, exp time.Time, done <-chan struct{}) {
