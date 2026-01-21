@@ -274,4 +274,142 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Attach Create Group button handler
     document.getElementById('create-group-btn')?.addEventListener('click', openCreateGroupModal);
+    
+    // Note: initFileUpload() is called from app.js AFTER upload-zone component is loaded
 });
+
+// ==========================================
+// File Selection & Upload Functions
+// ==========================================
+
+// Selected files storage
+let selectedFiles = [];
+
+/**
+ * Initialize file upload zone functionality
+ */
+function initFileUpload() {
+    const uploadZone = document.getElementById('upload-zone');
+    const selectFilesBtn = document.getElementById('select-files-btn');
+    
+    if (!uploadZone) return;
+    
+    // Create hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'file-input';
+    fileInput.multiple = true;
+    fileInput.style.display = 'none';
+    document.body.appendChild(fileInput);
+    
+    // Click to select files (always opens file picker to add more)
+    selectFilesBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+    });
+    
+    // Click upload zone - show existing files or open picker
+    uploadZone.addEventListener('click', () => {
+        if (selectedFiles.length > 0) {
+            // Files already exist, just show the modal
+            showFileSelectionModal();
+        } else {
+            // No files yet, open file picker
+            fileInput.click();
+        }
+    });
+    
+    // File input change handler
+    fileInput.addEventListener('change', (e) => {
+        handleFileSelect(e.target.files);
+        fileInput.value = ''; // Reset for same file selection
+    });
+    
+    // Drag & Drop handlers
+    uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadZone.classList.add('border-primary', 'bg-primary/5');
+    });
+    
+    uploadZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('border-primary', 'bg-primary/5');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('border-primary', 'bg-primary/5');
+        handleFileSelect(e.dataTransfer.files);
+    });
+    
+    // Also handle drag on the whole page
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    
+    document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.target.closest('#upload-zone')) return; // Already handled
+        handleFileSelect(e.dataTransfer.files);
+    });
+}
+
+/**
+ * Handle file selection
+ * @param {FileList} files
+ */
+/**
+ * Handle file selection
+ * @param {FileList} files
+ */
+function handleFileSelect(files) {
+    if (!files || files.length === 0) return;
+    
+    // Add new files to selection
+    const newFiles = Array.from(files);
+    
+    // Convert File objects to serializable format for basic info
+    // (Note: In a real app we'd need to handle the actual file data differently, 
+    // potentially storing in IndexedDB or keeping the Blob URL if SPA, 
+    // but for this multi-page demo we'll just simulate passing info)
+    const filesInfo = newFiles.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        lastModified: f.lastModified
+    }));
+    
+    // Combine with key existing files if any (though typically we might start fresh or merge)
+    // For simplicity let's append
+    let currentFiles = [];
+    try {
+        const existing = sessionStorage.getItem('gdrop_transfer_files');
+        if (existing) currentFiles = JSON.parse(existing);
+    } catch(e) {}
+    
+    const updatedFiles = [...currentFiles, ...filesInfo];
+    
+    // Save to session storage
+    sessionStorage.setItem('gdrop_transfer_files', JSON.stringify(updatedFiles));
+    
+    // Also save selected devices
+    const devices = getSelectedDevices();
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(devices));
+    
+    // Save ALL devices to session storage so we can add more in the review page
+    sessionStorage.setItem('gdrop_available_devices', JSON.stringify(sampleDevices));
+    
+    console.log('[Upload] Redirecting to review page with', updatedFiles.length, 'files');
+    
+    // Redirect to review page
+    // Check if we are in root or pages directory
+    const isPagesDir = window.location.pathname.includes('/pages/');
+    const reviewPageUrl = isPagesDir ? 'transfer-review.html' : 'pages/transfer-review.html';
+    
+    window.location.href = reviewPageUrl;
+}
+
+// Export functions globally
+window.handleFileSelect = handleFileSelect;
+// Obsolete exports removed
+
