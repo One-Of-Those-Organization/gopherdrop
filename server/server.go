@@ -2,18 +2,18 @@ package server
 
 import (
 	jwtware "github.com/gofiber/contrib/jwt"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/websocket/v2"
 	"gorm.io/gorm"
 	"log"
 	"sync"
-	"github.com/gofiber/websocket/v2"
 	"time"
 )
 
 type ManagedUser struct {
-	User User
-	Conn *websocket.Conn
+	User      User
+	Conn      *websocket.Conn
 	JWTExpiry time.Time
 	// NOTE: will add the webrtc stuff later here
 }
@@ -25,26 +25,27 @@ type Server struct {
 	Pass        string
 	Challenges  map[string]time.Time
 	ChallengeMu sync.RWMutex
-    MUser       map[*websocket.Conn]ManagedUser
+	MUser       map[*websocket.Conn]*ManagedUser
 	MUserMu     sync.RWMutex
+	CachedUser  []*ManagedUser
 }
 
 func InitServer(url string, password string) *Server {
 	app := fiber.New(fiber.Config{
 		AppName: "GopherDrop Backend Ow0",
 	})
-    app.Use(cors.New(cors.Config{
-        AllowOrigins: "*",
-        AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-        AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
-        AllowCredentials: false,
-    }))
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "*",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
+		AllowCredentials: false,
+	}))
 	return &Server{
 		App:        app,
 		Url:        url,
 		Pass:       password,
 		Challenges: make(map[string]time.Time),
-		MUser:      make(map[*websocket.Conn]ManagedUser),
+		MUser:      make(map[*websocket.Conn]*ManagedUser),
 	}
 }
 
@@ -60,7 +61,7 @@ func (s *Server) SetupAllEndPoint() {
 	}))
 
 	// GET: /
-    SetupStaticFrontEnd(s)
+	SetupStaticFrontEnd(s)
 
 	// POST: /api/v1/register
 	// to register from the name client provided
@@ -97,4 +98,27 @@ func StartJanitor(s *Server) {
 			s.ChallengeMu.Unlock()
 		}
 	}()
+}
+
+func CacheDiscoverableUser(s *Server) {
+	for _, user := range s.MUser {
+		if user.Conn != nil && user.User.IsDiscoverable {
+			s.CachedUser = append(s.CachedUser, user)
+		}
+	}
+}
+
+func AddCachedUser(s *Server, user *ManagedUser) {
+	s.CachedUser = append(s.CachedUser, user)
+}
+
+func DelCachedUser(s *Server, id int) {
+	for i, user := range s.CachedUser {
+		if user.User.ID == id {
+			s.CachedUser[i] = s.CachedUser[len(s.CachedUser)-1]
+			s.CachedUser[len(s.CachedUser)-1] = nil
+			s.CachedUser = s.CachedUser[:len(s.CachedUser)-1]
+			return
+		}
+	}
 }
