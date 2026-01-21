@@ -47,13 +47,15 @@ function isRegistered() {
 // ==========================================
 // Send to Backend Functions
 // ==========================================
+const publicKeyBuffer  = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+const publicKeyBase64  = bufferToBase64(publicKeyBuffer);
 try {
     const response = await fetch(ENDPOINTS.REGISTER, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             username: getDeviceName(),
-            public_key: getPrivateKey()
+            public_key: publicKeyBase64
         })
     });
     console.log('[Auth] Registration response status:', response.status);
@@ -61,48 +63,15 @@ try {
     console.error('[Auth] Registration failed:', e);
 }
 
-
-//     try {
-//         const response = await fetch(ENDPOINTS.REGISTER, {
-//             method: 'POST',
-//             headers: { 'Content-Type': 'application/json' },
-//             body: JSON.stringify({
-//                 username: deviceName,
-//                 public_key: publicKeyBase64
-//             })
-//         });
-//
-//         const data = await response.json();
-//
-//         // Save Device ID if backend returns it (it might return user object with id)
-//         if (response.ok) {
-//             // Check where the ID is located in the response
-//             const id = data.data?.id || data.id;
-//             if (id) {
-//                 localStorage.setItem(STORAGE_KEYS.DEVICE_ID, id);
-//                 console.log('[Auth] Device registered successfully. ID:', id);
-//             }
-//         }
-//
-//         return { success: response.ok, data };
-//     } catch (error) {
-//         console.error('[Auth] Registration failed:', error);
-//         // Still save locally even if server is unavailable
-//         return {
-//             success: false,
-//             error: error.message,
-//             localOnly: true
-//         };
-//     }
-// }
-
 async function autoLogin() {
     const deviceID = getDeviceName();
     const privateKey = getPrivateKey();
 
     if (!deviceID || !privateKey) {
-        console.log('[Auth] Cannot auto-login: missing credentials');
-        return { success: false, error: 'No stored credentials' };
+        return {
+            success: false,
+            error: 'No stored credentials'
+        };
     }
 
     try {
@@ -114,7 +83,9 @@ async function autoLogin() {
         console.log('[Auth] Received challenge:', challengeBase64.substring(0, 20) + '...');
 
         // 2. Sign the challenge
-        const signature = await signChallenge(challengeBase64, privateKey);
+        const importedKey = await importPrivateKey();
+        const signature = await signChallenge(challengeBase64, importedKey);
+
         console.log('[Auth] Challenge signed');
 
         // 3. Send login request
@@ -154,10 +125,6 @@ function clearCredentials() {
 // ==========================================
 // Initialization
 // ==========================================
-
-/**
- * Initialize authentication on page load
- */
 async function initAuth() {
     console.log('[Auth] Initializing...');
 

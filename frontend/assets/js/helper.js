@@ -13,6 +13,17 @@ export function base64ToBuffer(base64) {
 }
 
 // ==========================================
+// Helper Read Device Name and Private Key
+// ==========================================
+export function getPrivateKey() {
+    return localStorage.getItem('gdrop_private_key');
+}
+
+export function getDeviceName() {
+    return localStorage.getItem('gdrop_device_name');
+}
+
+// ==========================================
 // Cryptographic Functions
 // ==========================================
 
@@ -39,36 +50,46 @@ export async function initKeys() {
 
     // Export private & public key ke ArrayBuffer
     const privateKeyBuffer = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-    const publicKeyBuffer  = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
 
     // Convert ArrayBuffer ke Base64 agar bisa simpan di localStorage
     const privateKeyBase64 = bufferToBase64(privateKeyBuffer);
-    const publicKeyBase64  = bufferToBase64(publicKeyBuffer);
 
     // Set Private Key as User Identifier
     localStorage.setItem('gdrop_private_key', privateKeyBase64);
 
-    // Send Public key to Backend
-
-
     console.log('[Auth] Keys stored in localStorage');
 }
 
-// // TODO : Finish this function
-// async function exportPublicKey(publicKey) {
-//     const rawKey = await window.crypto.subtle.exportKey("raw", publicKey);
-//     console.log('Export Public Key:', publicKey);
-//     return bufferToBase64(rawKey);
-// }
+export async function importPrivateKey() {
+    const base64 = getPrivateKey();
+    if (!base64) return null;
+
+    const keyBuffer = base64ToBuffer(base64);
+
+    return await window.crypto.subtle.importKey(
+        "pkcs8",
+        keyBuffer,
+        { name: "Ed25519" },
+        false,
+        ["sign"]
+    );
+}
+
 
 // ==========================================
 // Device ID Functions
 // ==========================================
 export async function initDeviceID() {
-    let generate_device_id = localStorage.getItem('gdrop_device_id')
-
-    if (!generate_device_id){
-        generate_device_id = crypto.randomUUID()
-        localStorage.setItem('gdrop_device_id', generate_device_id)
+    let deviceName = getDeviceName();
+    if (!deviceName) {
+        deviceName = crypto.randomUUID();
+        localStorage.setItem('gdrop_device_id', deviceName);
     }
+
+    if (!localStorage.getItem('gdrop_device_name')) {
+        const defaultName = navigator.userAgent.split(' ')[0];
+        localStorage.setItem('gdrop_device_name', defaultName);
+    }
+
+    return { deviceName, name: localStorage.getItem('gdrop_device_name') };
 }
