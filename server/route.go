@@ -133,8 +133,6 @@ func SetupLogin(s *Server, group fiber.Router) {
 func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 	group.Use("/ws", helper.WebSocketJWTGate)
 	group.Get("/ws", websocket.New(func(conn *websocket.Conn) {
-		defer conn.Close()
-
 		claims, ok := conn.Locals("claims").(jwt.MapClaims)
 		if !ok {
 			log.Println("missing claims, closing")
@@ -156,6 +154,13 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		}
 		s.MUser[conn] = muser
 		s.MUserMu.Unlock()
+
+		defer func() {
+			s.MUserMu.Lock()
+	        delete(s.MUser, conn)
+	        s.MUserMu.Unlock()
+	        log.Println("WS disconnected user:", claims["username"])
+		}()
 
 		log.Println("WS connected user:", claims["username"])
 		HandleWS(s, &muser)
