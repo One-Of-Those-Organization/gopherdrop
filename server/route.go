@@ -3,8 +3,10 @@ package server
 import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/websocket/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"gopherdrop/helper"
+	"log"
 	"time"
 )
 
@@ -125,4 +127,36 @@ func SetupLogin(s *Server, group fiber.Router) {
 
 		return resp(c, cret(true, "token", t), fiber.StatusOK)
 	})
+}
+
+func SetupWebSocketUpgrade(s *Server, group fiber.Router) {
+	s.App.Use("/ws", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+}
+
+func SetupWebSocketEndPoint(_ *Server, group fiber.Router) {
+	group.Get("/ws", websocket.New(func(conn *websocket.Conn) {
+		defer conn.Close()
+
+		for {
+			mt, msg, err := conn.ReadMessage()
+			if err != nil {
+				log.Println("read error:", err)
+				break
+			}
+
+			log.Printf("recv: %s\n", msg)
+
+			// echo back
+			if err := conn.WriteMessage(mt, msg); err != nil {
+				log.Println("write error:", err)
+				break
+			}
+		}
+	}))
 }

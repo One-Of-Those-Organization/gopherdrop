@@ -1,10 +1,11 @@
 package server
 
 import (
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 	"log"
 	"sync"
-	"gorm.io/gorm"
 	"time"
 )
 
@@ -36,9 +37,9 @@ func (s *Server) StartServer() {
 
 func (s *Server) SetupAllEndPoint() {
 	api_pub := s.App.Group("/api/v1/")
-	// protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
-	//     SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
-	// }))
+	protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
+		SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
+	}))
 
 	// GET: /
 	// testing the server if its running.
@@ -59,6 +60,9 @@ func (s *Server) SetupAllEndPoint() {
 	// GET: /api/v1/challenge
 	// to get challenge for logging in
 	SetupChallange(s, api_pub)
+
+	SetupWebSocketUpgrade(s, api_pub)
+	SetupWebSocketEndPoint(s, protected)
 }
 
 func StartJanitor(s *Server) {
