@@ -45,7 +45,6 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 
 	startJWTExpiryWatcher(mUser.Conn, mUser.JWTExpiry, done)
 	for {
-		// TODO: when the JWT expired then error out or disconnect this connection
 		var msg WSMessage
 		if err := mUser.Conn.ReadJSON(&msg); err != nil {
 			break
@@ -75,23 +74,23 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 		case START_SHARING:
 			sendWS(mUser.Conn, USER_SHARE_LIST, s.CachedUser)
 			continue
+			// TODO: will be changed later
 		case USER_SHARE_TARGET:
-			targetKeys, ok := msg.Data.([]any)
-			if !ok {
+			var data struct {
+				PublicKey []string `json:"public_keys"`
+			}
+
+			if err := mapstructure.Decode(msg.Data, &data); err != nil {
 				sendWS(mUser.Conn, ERROR, "invalid data for USER_SHARE_TARGET")
 				continue
 			}
 
-			var targets []*ManagedUser
+			var targets []*TransactionTarget
 			s.MUserMu.RLock()
-			for _, key := range targetKeys {
-				keyStr, ok := key.(string)
-				if !ok {
-					continue
-				}
+			for _, key := range data.PublicKey {
 				for _, managedUser := range s.MUser {
-					if managedUser.User.PublicKey == keyStr {
-						targets = append(targets, managedUser)
+					if managedUser.User.PublicKey == key {
+						targets = append(targets, &TransactionTarget{managedUser, Pending})
 						break
 					}
 				}
@@ -113,6 +112,17 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			s.TransactionMu.Lock()
 			s.Transactions[txID] = transaction
 			s.TransactionMu.Unlock()
+
+			// Notify targets
+			for _, target := range targets {
+				sendWS(target.User.Conn, FILE_SHARE_ACCEPT, struct {
+					TransactionID string `json:"transaction_id"`
+					Sender        string `json:"sender"`
+				}{
+					TransactionID: txID,
+					Sender:        mUser.MinUser.Username,
+				})
+			}
 
 			sendWS(mUser.Conn, USER_SHARE_TARGET, txID)
 			continue
@@ -157,7 +167,84 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 
 			sendWS(mUser.Conn, FILE_SHARE_TARGET, "files added to transaction")
 			continue
+		case FILE_SHARE_ACCEPT:
+			var data struct {
+				TransactionID string `json:"transaction_id"`
+				Accept        bool   `json:"accept"`
+			}
+			if err := mapstructure.Decode(msg.Data, &data); err != nil {
+				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_ACCEPT")
+				continue
+			}
+
+			s.TransactionMu.Lock()
+			defer s.TransactionMu.Unlock()
+
+			tx, ok := s.Transactions[data.TransactionID]
+			if !ok {
+				sendWS(mUser.Conn, ERROR, "transaction not found")
+				continue
+			}
+
+			for _, target := range tx.Targets {
+				if target.User == mUser {
+					if data.Accept {
+						target.Status = Accepted
+					} else {
+						target.Status = Declined
+					}
+					break
+				}
+			}
+
+			sendWS(mUser.Conn, FILE_SHARE_ACCEPT, "response recorded")
+			continue
+
+		// NOTE: not done yet but impl the transaction rejected stuff
 		case START_TRANSACTION:
+			var data struct {
+				TransactionID string `json:"transaction_id"`
+			}
+			if err := mapstructure.Decode(msg.Data, &data); err != nil {
+				sendWS(mUser.Conn, ERROR, "invalid data for START_TRANSACTION")
+				continue
+			}
+			s.TransactionMu.Lock()
+			defer s.TransactionMu.Unlock()
+
+			tx, ok := s.Transactions[data.TransactionID]
+			if !ok {
+				sendWS(mUser.Conn, ERROR, "transaction not found")
+				continue
+			}
+
+			if tx.Sender != mUser {
+				sendWS(mUser.Conn, ERROR, "not authorized to start this transaction")
+				continue
+			}
+
+			var acceptedTargets []*TransactionTarget
+			for _, target := range tx.Targets {
+				if target.Status == Accepted {
+					acceptedTargets = append(acceptedTargets, target)
+				}
+			}
+			tx.Targets = acceptedTargets
+
+			payload := struct {
+				TransactionID string      `json:"transaction_id"`
+				Sender        string      `json:"sender"`
+				Files         []*FileInfo `json:"files"`
+			}{
+				TransactionID: tx.ID,
+				Sender:        tx.Sender.MinUser.Username,
+				Files:         tx.Files,
+			}
+
+			for _, target := range tx.Targets {
+				sendWS(target.User.Conn, START_TRANSACTION, payload)
+			}
+			sendWS(mUser.Conn, START_TRANSACTION, "transaction started")
 			continue
 		}
 	}

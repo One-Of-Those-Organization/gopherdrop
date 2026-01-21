@@ -25,11 +25,22 @@ type ManagedUser struct {
 }
 
 type Transaction struct {
-	ID      string         `json:"id"`
-	Sender  *ManagedUser   `json:"-"`
-	Targets []*ManagedUser `json:"-"`
-	Files   []*FileInfo    `json:"files"`
-	// TODO: add file stuff here
+	ID      string               `json:"id"`
+	Sender  *ManagedUser         `json:"-"`
+	Targets []*TransactionTarget `json:"-"`
+	Files   []*FileInfo          `json:"files"`
+}
+
+type TargetStatus int
+const (
+	Pending   TargetStatus = iota
+	Accepted
+	Declined
+)
+
+type TransactionTarget struct {
+	User   *ManagedUser
+	Status TargetStatus
 }
 
 type FileInfo struct {
