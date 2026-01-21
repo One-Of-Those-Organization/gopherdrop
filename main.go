@@ -1,18 +1,28 @@
 package main
 
 // pion
-// gorm
 import (
-	"fmt"
+	"log"
 	server "gopherdrop/server"
+	helper "gopherdrop/helper"
 )
 
 func main() {
-	// TODO: use env to change the port
-	var ip string = "0.0.0.0"
-	var port string = "8000"
-	combined := fmt.Sprintf("%s:%s", ip, port)
+	sec := helper.GetConfigFromEnv()
 
-	ser := server.InitServer(combined)
+    db, err := server.OpenDB(sec.DBPath)
+    if err != nil {
+        log.Printf("Failed to open the db: %v", err)
+        return
+    }
+    err = server.MigrateDB(db)
+    if err != nil {
+        log.Printf("Failed to mirgrate the db: %v", err)
+        return
+    }
+
+	ser := server.InitServer(sec.Url, sec.Password)
+	server.StartJanitor(ser)
+	ser.SetupAllEndPoint()
 	ser.StartServer()
 }
