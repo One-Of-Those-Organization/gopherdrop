@@ -10,21 +10,24 @@ import (
 type WSType int
 
 const (
-	NONE                WSType = iota // 0
-	ERROR                             // 1
-	CONFIG_DISCOVERABLE               // 2
-	// NOTE: sended by the client when they ready to share
-	START_SHARING // 3
-	// NOTE: sended by the server the list of discoverable user
-	USER_SHARE_LIST // 4
-	// NOTE: sended by the client to give the pubkey of who is the user they want to sent into
-	USER_SHARE_TARGET // 5
-	// NOTE: sended by the client to give the server context what file is being sended on the transaction
-	FILE_SHARE_TARGET // 6
-	// NOTE: sended by the server to all transaction recv to give them the sender webrtc addres(for p2p)
-	START_TRANSACTION // 7
-	FILE_SHARE_ACCEPT // 8
-	FILE_DATA         // 9
+	NONE                WSType = iota	// 0
+	ERROR								// 1
+
+	CONFIG_DISCOVERABLE					// 2
+
+	START_SHARING						// 3
+	USER_SHARE_LIST						// 4
+
+	NEW_TRANSACTION						// 5
+	INFO_TRANSACTION                    // 6
+	DELETE_TRANSACTION					// 7
+
+	USER_SHARE_TARGET					// 8
+	FILE_SHARE_TARGET					// 9
+
+	START_TRANSACTION					// 10
+	FILE_SHARE_ACCEPT					// 11
+	FILE_DATA							// 12
 )
 
 type WSMessage struct {
@@ -74,10 +77,58 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 		case START_SHARING:
 			sendWS(mUser.Conn, USER_SHARE_LIST, s.CachedUser)
 			continue
-			// TODO: will be changed later
+		case NEW_TRANSACTION:
+			txID := uuid.New().String()
+			transaction := &Transaction{
+				ID:      txID,
+				Sender:  mUser,
+				Targets: nil,
+				Files: nil,
+			}
+
+			s.TransactionMu.Lock()
+			s.Transactions[txID] = transaction
+			s.TransactionMu.Unlock()
+			sendWS(mUser.Conn, USER_SHARE_TARGET, transaction)
+			continue
+		case DELETE_TRANSACTION:
+			var valid bool = true
+			n, ok := msg.Data.(string)
+			if !ok {
+				sendWS(mUser.Conn, ERROR, "invalid websocket message")
+				continue
+			}
+
+			var target []*ManagedUser
+
+			s.TransactionMu.Lock()
+
+			if mUser.MinUser.PublicKey == s.Transactions[n].Sender.MinUser.PublicKey {
+				for _, user := range s.Transactions[n].Targets {
+					target = append(target, user.User)
+				}
+				delete(s.Transactions, n)
+			} else {
+				valid = false
+			}
+
+			s.TransactionMu.Unlock()
+
+			if valid {
+				s.TransactionMu.RLock()
+
+				for _, user := range target {
+					sendWS(user.Conn, USER_SHARE_TARGET, n)
+				}
+				sendWS(mUser.Conn, USER_SHARE_TARGET, n)
+
+				s.TransactionMu.RUnlock()
+			}
+			continue
 		case USER_SHARE_TARGET:
 			var data struct {
-				PublicKey []string `json:"public_keys"`
+				TransactionID string   `json:"transaction_id"`
+				PublicKey     []string `json:"public_keys"`
 			}
 
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
@@ -102,29 +153,24 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				continue
 			}
 
-			txID := uuid.New().String()
-			transaction := &Transaction{
-				ID:      txID,
-				Sender:  mUser,
-				Targets: targets,
-			}
-
 			s.TransactionMu.Lock()
-			s.Transactions[txID] = transaction
+			s.Transactions[data.TransactionID].Targets = targets
 			s.TransactionMu.Unlock()
 
 			// Notify targets
+			s.TransactionMu.RLock()
 			for _, target := range targets {
 				sendWS(target.User.Conn, FILE_SHARE_ACCEPT, struct {
-					TransactionID string `json:"transaction_id"`
-					Sender        string `json:"sender"`
+					Transaction *Transaction `json:"transaction"`
+					Sender      string      `json:"sender"`
 				}{
-					TransactionID: txID,
-					Sender:        mUser.MinUser.Username,
+					Transaction: s.Transactions[data.TransactionID],
+					Sender:      mUser.MinUser.Username,
 				})
 			}
 
-			sendWS(mUser.Conn, USER_SHARE_TARGET, txID)
+			sendWS(mUser.Conn, USER_SHARE_TARGET, s.Transactions[data.TransactionID])
+			s.TransactionMu.RUnlock()
 			continue
 		case FILE_SHARE_TARGET:
 			var data struct {
