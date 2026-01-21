@@ -12,9 +12,9 @@ import (
 )
 
 type ManagedUser struct {
-	User      User
-	Conn      *websocket.Conn
-	JWTExpiry time.Time
+	User      User            `json:"user"`
+	Conn      *websocket.Conn `json:"-"`
+	JWTExpiry time.Time       `json:"-"`
 	// NOTE: will add the webrtc stuff later here
 }
 
