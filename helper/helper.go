@@ -35,6 +35,7 @@ func GetConfigFromEnv() GoDropConfig {
     sec := GoDropConfig{
 		Url: url,
         Password: password,
+		DBPath: dbpath,
     }
     return sec
 }

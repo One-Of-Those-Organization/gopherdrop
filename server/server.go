@@ -14,6 +14,7 @@ import (
 type ManagedUser struct {
 	User User
 	Conn *websocket.Conn
+	JWTExpiry time.Time
 	// NOTE: will add the webrtc stuff later here
 }
 

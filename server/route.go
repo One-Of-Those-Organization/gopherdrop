@@ -137,6 +137,8 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		}
 
 		pubkey:= claims["public_key"].(string)
+		expUnix := int64(claims["exp"].(float64))
+		expTime := time.Unix(expUnix, 0)
 
 		var user User
 		if err := s.DB.Where("public_key = ?", pubkey).First(&user).Error; err != nil {
@@ -148,6 +150,7 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		muser := ManagedUser{
 			User: user,
 			Conn: conn,
+			JWTExpiry: expTime,
 		}
 		s.MUser[conn] = muser
 		s.MUserMu.Unlock()
