@@ -61,7 +61,9 @@ func (s *Server) SetupAllEndPoint() {
 	// to get challenge for logging in
 	SetupChallange(s, api_pub)
 
-	SetupWebSocketUpgrade(s, api_pub)
+	// GET: /api/v1/protected/ws
+	// to upgrade the connection to websocket for later
+	// use (listing all the near ppl, conn to webrtc)
 	SetupWebSocketEndPoint(s, protected)
 }
 

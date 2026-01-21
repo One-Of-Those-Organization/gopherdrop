@@ -129,19 +129,18 @@ func SetupLogin(s *Server, group fiber.Router) {
 	})
 }
 
-func SetupWebSocketUpgrade(s *Server, group fiber.Router) {
-	s.App.Use("/ws", func(c *fiber.Ctx) error {
-		if websocket.IsWebSocketUpgrade(c) {
-			c.Locals("allowed", true)
-			return c.Next()
-		}
-		return fiber.ErrUpgradeRequired
-	})
-}
-
 func SetupWebSocketEndPoint(_ *Server, group fiber.Router) {
+	group.Use("/ws", helper.WebSocketJWTGate)
 	group.Get("/ws", websocket.New(func(conn *websocket.Conn) {
 		defer conn.Close()
+
+		claims, ok := conn.Locals("claims").(jwt.MapClaims)
+		if !ok {
+			log.Println("missing claims, closing")
+			return
+		}
+
+		log.Println("WS connected user:", claims["username"])
 
 		for {
 			mt, msg, err := conn.ReadMessage()
@@ -152,7 +151,6 @@ func SetupWebSocketEndPoint(_ *Server, group fiber.Router) {
 
 			log.Printf("recv: %s\n", msg)
 
-			// echo back
 			if err := conn.WriteMessage(mt, msg); err != nil {
 				log.Println("write error:", err)
 				break
