@@ -3,8 +3,10 @@ package server
 import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/websocket/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"gopherdrop/helper"
+	"log"
 	"time"
 )
 
@@ -26,13 +28,6 @@ func resp(c *fiber.Ctx, ret Ret, code int) error {
 	return c.Status(code).JSON(ret)
 }
 
-func SetupRoot(s *Server) {
-	s.App.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Server is online")
-	})
-
-}
-
 func SetupRegister(s *Server, group fiber.Router) {
 	group.Post("/register", func(c *fiber.Ctx) error {
 		var b struct {
@@ -52,6 +47,7 @@ func SetupRegister(s *Server, group fiber.Router) {
 			Username:  b.Username,
 			PublicKey: b.PublicKey,
 			CreatedAt: time.Now(),
+			IsDiscoverable: true,
 		}
 
 		if err := s.DB.Create(&newUser).Error; err != nil {
@@ -78,7 +74,7 @@ func SetupChallange(s *Server, group fiber.Router) {
 func SetupLogin(s *Server, group fiber.Router) {
 	group.Post("/login", func(c *fiber.Ctx) error {
 		var b struct {
-			Username  string `json:"username"`
+			PubKey    string `json:"public_key"`
 			Challenge string `json:"challenge"`
 			Signature string `json:"signature"`
 		}
@@ -101,7 +97,7 @@ func SetupLogin(s *Server, group fiber.Router) {
 		}
 
 		var user User
-		if err := s.DB.Where("username = ?", b.Username).First(&user).Error; err != nil {
+		if err := s.DB.Where("public_key = ?", b.PubKey).First(&user).Error; err != nil {
 			return resp(c, cret(false, "User not found", nil), fiber.StatusBadRequest)
 		}
 
@@ -125,4 +121,45 @@ func SetupLogin(s *Server, group fiber.Router) {
 
 		return resp(c, cret(true, "token", t), fiber.StatusOK)
 	})
+}
+
+func SetupStaticFrontEnd(s *Server) {
+	s.App.Static("/", "./frontend")
+}
+
+func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
+	group.Use("/ws", helper.WebSocketJWTGate)
+	group.Get("/ws", websocket.New(func(conn *websocket.Conn) {
+		claims, ok := conn.Locals("claims").(jwt.MapClaims)
+		if !ok {
+			log.Println("missing claims, closing")
+			return
+		}
+
+		pubkey:= claims["public_key"].(string)
+
+		var user User
+		if err := s.DB.Where("public_key = ?", pubkey).First(&user).Error; err != nil {
+			log.Println("invalid JWT")
+			return
+		}
+
+		s.MUserMu.Lock()
+		muser := ManagedUser{
+			User: user,
+			Conn: conn,
+		}
+		s.MUser[conn] = muser
+		s.MUserMu.Unlock()
+
+		defer func() {
+			s.MUserMu.Lock()
+	        delete(s.MUser, conn)
+	        s.MUserMu.Unlock()
+	        log.Println("WS disconnected user:", claims["username"])
+		}()
+
+		log.Println("WS connected user:", claims["username"])
+		HandleWS(s, &muser)
+	}))
 }

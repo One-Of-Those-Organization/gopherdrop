@@ -1,12 +1,21 @@
 package server
 
 import (
+	jwtware "github.com/gofiber/contrib/jwt"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 	"log"
 	"sync"
-	"gorm.io/gorm"
+	"github.com/gofiber/websocket/v2"
 	"time"
 )
+
+type ManagedUser struct {
+	User User
+	Conn *websocket.Conn
+	// NOTE: will add the webrtc stuff later here
+}
 
 type Server struct {
 	Url         string
@@ -15,17 +24,26 @@ type Server struct {
 	Pass        string
 	Challenges  map[string]time.Time
 	ChallengeMu sync.RWMutex
+    MUser       map[*websocket.Conn]ManagedUser
+	MUserMu     sync.RWMutex
 }
 
 func InitServer(url string, password string) *Server {
 	app := fiber.New(fiber.Config{
 		AppName: "GopherDrop Backend Ow0",
 	})
+    app.Use(cors.New(cors.Config{
+        AllowOrigins: "*",
+        AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+        AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+        AllowCredentials: false,
+    }))
 	return &Server{
 		App:        app,
 		Url:        url,
 		Pass:       password,
 		Challenges: make(map[string]time.Time),
+		MUser:      make(map[*websocket.Conn]ManagedUser),
 	}
 }
 
@@ -36,13 +54,12 @@ func (s *Server) StartServer() {
 
 func (s *Server) SetupAllEndPoint() {
 	api_pub := s.App.Group("/api/v1/")
-	// protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
-	//     SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
-	// }))
+	protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
+		SigningKey: jwtware.SigningKey{Key: []byte(s.Pass)},
+	}))
 
 	// GET: /
-	// testing the server if its running.
-	SetupRoot(s)
+    SetupStaticFrontEnd(s)
 
 	// POST: /api/v1/register
 	// to register from the name client provided
@@ -51,14 +68,19 @@ func (s *Server) SetupAllEndPoint() {
 
 	// POST: /api/v1/login
 	// to login from the generated password and id
-	// - data: id: int, challenge string, signature string
+	// - data: public_key string, challenge string, signature string
 	// NOTE: the challenge is the exact same stuff you got from the `SetupChallenge` and the result
 	//       of sign with your private key is `signature`.
 	SetupLogin(s, api_pub)
 
-	// POST: /api/v1/challenge
+	// GET: /api/v1/challenge
 	// to get challenge for logging in
 	SetupChallange(s, api_pub)
+
+	// GET: /api/v1/protected/ws
+	// to upgrade the connection to websocket for later
+	// use (listing all the near ppl, conn to webrtc)
+	SetupWebSocketEndPoint(s, protected)
 }
 
 func StartJanitor(s *Server) {

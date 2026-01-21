@@ -3,6 +3,7 @@ package helper
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/gofiber/websocket/v2"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -75,4 +76,23 @@ func GetJWT(c *fiber.Ctx) (jwt.MapClaims, error) {
     }
     claims := user.Claims.(jwt.MapClaims)
     return claims, nil
+}
+
+func WebSocketJWTGate(c *fiber.Ctx) error {
+	claims, err := GetJWT(c)
+	if err != nil {
+		return fiber.ErrUnauthorized
+	}
+
+	if websocket.IsWebSocketUpgrade(c) {
+		c.Locals("claims", claims)
+		return c.Next()
+	}
+
+	return fiber.ErrUpgradeRequired
+}
+
+func WrapBase64(value string) string {
+    str := base64.StdEncoding.EncodeToString([]byte(value))
+    return str
 }
