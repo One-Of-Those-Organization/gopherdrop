@@ -295,7 +295,70 @@ function closeIncomingModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+// ==========================================
+// Transfer Progress UI Logic
+// ==========================================
+
+function showTransferProgressUI(files, deviceCount) {
+    const overlay = document.getElementById('transfer-progress-overlay');
+    if (!overlay) return;
+
+    // Update Header Info
+    document.getElementById('total-items-badge').textContent = `${files.length} files`;
+    document.getElementById('recipient-count').textContent = `${deviceCount} devices`;
+
+    // Render Queue (Simple Version)
+    const queueContainer = document.getElementById('transfer-queue');
+    if (queueContainer) {
+        queueContainer.innerHTML = files.map(file => `
+            <div class="bg-white border border-slate-200 p-4 rounded-2xl flex items-center gap-4">
+                <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-primary">
+                    <span class="material-symbols-outlined">description</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="font-bold text-sm text-slate-800 truncate">${file.name}</p>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider" id="status-${file.name.replace(/\s/g, '')}">Pending</p>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    overlay.classList.remove('hidden');
+    overlay.classList.add('flex');
+}
+
+function updateFileProgressUI(fileName, percentage) {
+    // Update Text Status per File
+    const safeName = fileName.replace(/\s/g, '');
+    const statusEl = document.getElementById(`status-${safeName}`);
+    if (statusEl) {
+        if(percentage >= 100) {
+            statusEl.textContent = "COMPLETED";
+            statusEl.classList.add("text-green-500");
+        } else {
+            statusEl.textContent = `SENDING ${percentage}%`;
+        }
+    }
+
+    // Update Main Bar (Simplifikasi: cuma visual gerak)
+    const mainBar = document.getElementById('main-progress-bar');
+    if(mainBar) mainBar.style.width = `${percentage}%`;
+}
+
+function endTransferSession() {
+    const overlay = document.getElementById('transfer-progress-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+    }
+    // Refresh page untuk reset koneksi (bersih-bersih)
+    window.location.reload();
+}
+
 // Expose globals
+window.showTransferProgressUI = showTransferProgressUI;
+window.updateFileProgressUI = updateFileProgressUI;
+window.endTransferSession = endTransferSession;
 window.showToast = showToast;
 window.showIncomingModal = showIncomingModal;
 window.closeIncomingModal = closeIncomingModal;

@@ -210,8 +210,24 @@ function handleSignalingMessage(msg) {
             const files = JSON.parse(sessionStorage.getItem('gdrop_transfer_files') || '[]');
             const isInitiator = (files.length > 0);
 
+            // Siapkan antrian file & UI
+            let displayFiles = [];
+
             if (isInitiator) {
                 fileQueue = files; // Load antrian file
+            } else {
+                // Ambil dari data WebSocket (Backend sudah kirim list file)
+                // msg.data.files isinya array file dari server
+                if (msg.data && msg.data.files) {
+                    displayFiles = msg.data.files;
+                } else {
+                    displayFiles = [{name: "Unknown File", size: 0}];
+                }
+            }
+
+            // Tampilkan Overlay Progress
+            if(window.showTransferProgressUI) {
+                window.showTransferProgressUI(displayFiles, 1);
             }
 
             // MULAI WebRTC Handshake
@@ -341,7 +357,14 @@ async function startWebRTCConnection(isInitiator) {
     peerConnection.onconnectionstatechange = () => {
         console.log(`[WebRTC] Connection State: ${peerConnection.connectionState}`);
         if(peerConnection.connectionState === 'connected') {
-            showToast('P2P Connected! Transferring...', 'success');
+            showToast('P2P Connected!', 'success');
+
+            // Tampilkan UI Progress Overlay
+            if(window.showTransferProgressUI) {
+                // Ambil info file dari queue atau session
+                const files = fileQueue.length > 0 ? fileQueue : JSON.parse(sessionStorage.getItem('gdrop_transfer_files') || '[]');
+                window.showTransferProgressUI(files, 1);
+            }
         }
     };
 
@@ -417,20 +440,33 @@ function setupDataChannel(channel) {
     };
 }
 
-// TODO: Logic kirim Blob (Binary) nanti disini
 function sendFile(fileMeta) {
     if (dataChannel.readyState === 'open') {
+        // Update UI: Sending 0%
+        if(window.updateFileProgressUI) window.updateFileProgressUI(fileMeta.name, 10);
+
         console.log("Sending dummy data for:", fileMeta.name);
         dataChannel.send(`START_FILE:${fileMeta.name}`);
-        dataChannel.send("Ini adalah paket data dummy untuk test koneksi P2P.");
-        dataChannel.send("END_FILE");
 
-        showToast(`Sent: ${fileMeta.name}`, 'success');
+        // Simulasi delay biar kelihatan progress bar jalan
+        setTimeout(() => {
+            if(window.updateFileProgressUI) window.updateFileProgressUI(fileMeta.name, 50);
+            dataChannel.send("Ini isi file bohongan buat testing P2P.");
+        }, 500);
 
-        fileQueue.shift();
-        if(fileQueue.length > 0) {
-            setTimeout(() => sendFile(fileQueue[0]), 500);
-        }
+        setTimeout(() => {
+            dataChannel.send("END_FILE");
+            if(window.updateFileProgressUI) window.updateFileProgressUI(fileMeta.name, 100);
+            showToast(`Sent: ${fileMeta.name}`, 'success');
+
+            // Hapus dari antrian
+            fileQueue.shift();
+            if(fileQueue.length > 0) {
+                setTimeout(() => sendFile(fileQueue[0]), 1000);
+            } else {
+                document.getElementById('transfer-status-text').textContent = "ALL COMPLETED";
+            }
+        }, 1000);
     }
 }
 
