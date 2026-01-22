@@ -51,16 +51,6 @@ function isRegistered() {
 }
 
 // ==========================================
-// Logout Function
-// ==========================================
-function clearCredentials() {
-    Object.values(STORAGE_KEYS).forEach(key => {
-        localStorage.removeItem(key);
-    });
-    console.log('[Auth] All credentials cleared');
-}
-
-// ==========================================
 // Creating initAuth Function
 // ==========================================
 export async function initAuth() {
@@ -114,7 +104,7 @@ export async function initAuth() {
             // 1. Get Challenge from server
             const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
             if (!challengeRes.ok) throw new Error('Gagal konek ke Laptop (Challenge)');
-
+            
             const challengeData = await challengeRes.json();
             const challengeBase64 = challengeData.data;
 
@@ -133,13 +123,25 @@ export async function initAuth() {
                 })
             });
 
-            const loginJson = await loginRes.json();
-            if (loginJson.success) {
-                localStorage.setItem('gdrop_token', loginJson.data);
-                return loginJson.data;
-            }
+            const loginData = await loginRes.json();
 
-            return null;
+            if (loginRes.ok && loginData.success && loginData.data) {
+                localStorage.setItem('gdrop_token', loginData.data);
+                return loginData.data;
+            } else {
+                // If the server doesn't recognize us (DB reset?), clear creds and re-register
+                if (loginData.message === "User not found") {
+                    console.warn('[Auth] User not found on server. Clearing credentials and re-registering...');
+                    clearCredentials();
+                    return await initAuth();
+                }
+                if (loginData.message === "Authentication failed") {
+                    console.warn('[Auth] Auth failed (Key mismatch?). Clearing credentials and re-registering...');
+                    clearCredentials();
+                    return await initAuth();
+                }
+                throw new Error(loginData.message || "Login failed");
+            }
         }
     } catch (error) {
         alert("System Error: " + error.message);
