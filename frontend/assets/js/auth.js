@@ -7,7 +7,9 @@ import { bufferToBase64, base64ToBuffer, generateKeyPair, initDeviceID, savePriv
 const STORAGE_KEYS = {
     PRIVATE_KEY: 'gdrop_private_key',
     PUBLIC_KEY: 'gdrop_public_key',
-    DEVICE_ID: 'gdrop_device_id'
+    DEVICE_ID: 'gdrop_device_id',
+    DEVICE_NAME: 'gdrop_device_name',
+    TOKEN: 'gdrop_token'
 };
 
 // API Endpoints
@@ -142,9 +144,20 @@ export async function initAuth() {
                 localStorage.setItem('gdrop_token', loginData.data);
                 // alert("Info: Berhasil Login!"); // Uncomment untuk konfirmasi
                 return loginData.data;
+            } else {
+                // If the server doesn't recognize us (DB reset?), clear creds and re-register
+                if (loginData.message === "User not found") {
+                    console.warn('[Auth] User not found on server. Clearing credentials and re-registering...');
+                    clearCredentials();
+                    return await initAuth();
+                }
+                if (loginData.message === "Authentication failed") {
+                    console.warn('[Auth] Auth failed (Key mismatch?). Clearing credentials and re-registering...');
+                    clearCredentials();
+                    return await initAuth();
+                }
+                throw new Error(loginData.message || "Login failed");
             }
-
-            return null;
         }
     } catch (error) {
         alert("System Error: " + error.message);
