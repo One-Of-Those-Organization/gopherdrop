@@ -131,7 +131,9 @@ function connectToSignalingServer(token) {
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     // Use localhost:8080 if running locally, otherwise relative path might fail if ports differ
-    const wsUrl = `ws://localhost:8080/api/v1/protected/ws?token=${token}`;
+    // const wsUrl = `ws://localhost:8080/api/v1/protected/ws?token=${token}`;
+    // For debugging on my local machine, use localhost
+    const wsUrl = `ws://${window.location.hostname}:8080/api/v1/protected/ws?token=${token}`;
 
     console.log('[WS] Connecting to:', wsUrl);
 

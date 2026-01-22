@@ -67,10 +67,10 @@ export async function initAuth() {
     try {
         // [DEBUG LOGIC] Cek apakah Browser HP memblokir Crypto
         // Comment this block if not needed
-        if (!window.crypto || !window.crypto.subtle) {
-            alert("FATAL ERROR: Fitur Crypto diblokir Browser!\n\nSolusi: Buka chrome://flags, cari 'insecure origin', set Enabled untuk IP laptop ini.");
-            return null;
-        }
+        // if (!window.crypto || !window.crypto.subtle) {
+        //     alert("FATAL ERROR: Fitur Crypto diblokir Browser!\n\nSolusi: Buka chrome://flags, cari 'insecure origin', set Enabled untuk IP laptop ini.");
+        //     return null;
+        // }
 
         let privateKey = getPrivateKey();
         let deviceID = getDeviceName();
