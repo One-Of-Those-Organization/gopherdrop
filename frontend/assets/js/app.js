@@ -27,6 +27,8 @@ const RTC_CONFIG = {
     ]
 };
 
+const CHUNK_SIZE = 16 * 1024; // 16 KB per chunk
+
 // ==========================================
 // GLOBAL VARIABLES
 // ==========================================
@@ -43,6 +45,14 @@ let dataChannel = null;
 let targetPublicKey = null; // Lawan bicara (Receiver/Sender)
 let fileQueue = [];         // Antrian file
 let currentFile = null;
+
+// File Transfer State (Sender)
+let currentFileIndex = 0;
+
+// File Transfer State (Receiver)
+let incomingFileInfo = null;
+let incomingFileBuffer = [];
+let incomingReceivedSize = 0;
 
 // Helper wrapper untuk Toast (Safe Mode)
 const showToast = (msg, type) => {
@@ -428,10 +438,13 @@ async function handleWebRTCSignal(signal) {
 // ==========================================
 
 function setupDataChannel(channel) {
+    channel.binaryType = 'arraybuffer'; // Kirim data sebagai ArrayBuffer
+
     channel.onopen = () => {
         console.log("[DataChannel] OPEN");
         if (fileQueue.length > 0) {
-            sendFile(fileQueue[0]);
+            currentFileIndex = 0;
+            sendCurrentFile();
         }
     };
 
@@ -440,46 +453,118 @@ function setupDataChannel(channel) {
     };
 }
 
-function sendFile(fileMeta) {
-    if (dataChannel.readyState === 'open') {
-        // Update UI: Sending 0%
-        if(window.updateFileProgressUI) window.updateFileProgressUI(fileMeta.name, 10);
-
-        console.log("Sending dummy data for:", fileMeta.name);
-        dataChannel.send(`START_FILE:${fileMeta.name}`);
-
-        // Simulasi delay biar kelihatan progress bar jalan
-        setTimeout(() => {
-            if(window.updateFileProgressUI) window.updateFileProgressUI(fileMeta.name, 50);
-            dataChannel.send("Ini isi file bohongan buat testing P2P.");
-        }, 500);
-
-        setTimeout(() => {
-            dataChannel.send("END_FILE");
-            if(window.updateFileProgressUI) window.updateFileProgressUI(fileMeta.name, 100);
-            showToast(`Sent: ${fileMeta.name}`, 'success');
-
-            // Hapus dari antrian
-            fileQueue.shift();
-            if(fileQueue.length > 0) {
-                setTimeout(() => sendFile(fileQueue[0]), 1000);
-            } else {
-                document.getElementById('transfer-status-text').textContent = "ALL COMPLETED";
-            }
-        }, 1000);
+function sendCurrentFile() {
+    if (currentFileIndex >= fileQueue.length) {
+        console.log("All files sent.");
+        document.getElementById('transfer-status-text').textContent = "ALL COMPLETED";
+        return;
     }
+
+    const file = fileQueue[currentFileIndex];
+    if (!file) return;
+
+    console.log(`Sending File: ${file.name} (${file.size} bytes)`);
+
+    // 1. Kirim Metadata (JSON)
+    const metadata = JSON.stringify({
+        type: 'meta',
+        name: file.name,
+        size: file.size,
+        mime: file.type
+    });
+    dataChannel.send(metadata);
+
+    // 2. Mulai Kirim Chunk
+    const reader = new FileReader();
+    let offset = 0;
+
+    reader.onload = (e) => {
+        if (dataChannel.readyState !== 'open') return;
+
+        dataChannel.send(e.target.result); // Kirim Chunk ArrayBuffer
+        offset += e.target.result.byteLength;
+
+        // Update UI Progress
+        const progress = Math.min(100, Math.round((offset / file.size) * 100));
+        if(window.updateFileProgressUI) window.updateFileProgressUI(file.name, progress);
+
+        // Lanjut chunk berikutnya
+        if (offset < file.size) {
+            readSlice(offset);
+        } else {
+            console.log("File Sent Completely");
+            showToast(`Sent: ${file.name}`, 'success');
+            currentFileIndex++;
+            setTimeout(sendCurrentFile, 100); // Kirim file selanjutnya (kasih napas dikit)
+        }
+    };
+
+    const readSlice = (o) => {
+        const slice = file.slice(o, o + CHUNK_SIZE);
+        // Handle Backpressure (Penting biar browser gak crash)
+        if (dataChannel.bufferedAmount > 10 * 1024 * 1024) { // Max buffer 10MB
+            setTimeout(() => readSlice(o), 100);
+        } else {
+            reader.readAsArrayBuffer(slice);
+        }
+    };
+
+    readSlice(0);
 }
 
 function handleIncomingData(data) {
-    console.log("[Receiver] Data Masuk:", data);
-
+    // KASUS 1: Terima Metadata (String JSON)
     if (typeof data === 'string') {
-        if(data.startsWith("START_FILE")) {
-            showToast(`Receiving ${data.split(':')[1]}...`, 'info');
-        } else if (data === "END_FILE") {
-            showToast('File Received!', 'success');
+        try {
+            const msg = JSON.parse(data);
+            if (msg.type === 'meta') {
+                console.log("Receiving File:", msg.name);
+                incomingFileInfo = msg;
+                incomingFileBuffer = []; // Reset buffer
+                incomingReceivedSize = 0;
+
+                // Update UI: Mulai nerima
+                if(window.updateFileProgressUI) window.updateFileProgressUI(msg.name, 1);
+            }
+        } catch (e) { console.log("Text Data:", data); }
+        return;
+    }
+
+    // KASUS 2: Terima Chunk (ArrayBuffer)
+    if (incomingFileInfo) {
+        incomingFileBuffer.push(data);
+        incomingReceivedSize += data.byteLength;
+
+        // Update UI Progress Receiver
+        const progress = Math.min(100, Math.round((incomingReceivedSize / incomingFileInfo.size) * 100));
+        if(window.updateFileProgressUI) window.updateFileProgressUI(incomingFileInfo.name, progress);
+
+        // Cek Selesai
+        if (incomingReceivedSize >= incomingFileInfo.size) {
+            saveReceivedFile(incomingFileInfo, incomingFileBuffer);
+            incomingFileInfo = null; // Reset
         }
     }
+}
+
+function saveReceivedFile(meta, buffers) {
+    const blob = new Blob(buffers, { type: meta.mime || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+
+    // Auto Download
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = meta.name;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 1000);
+
+    showToast(`Received: ${meta.name}`, 'success');
 }
 
 // ==========================================
@@ -505,6 +590,19 @@ function startNetworkSpeedIndicator() {
     }, 800);
 }
 window.updateNetworkSpeed = (mbps) => { currentSpeedMbps = mbps; };
+
+// ==========================================
+// HELPER: HANDLE FILES FROM UI
+// ==========================================
+window.handleFilesSelected = (files) => {
+    // Convert FileList ke Array biar enak
+    fileQueue = Array.from(files);
+    console.log("Files loaded to memory:", fileQueue);
+
+    // Simpan metadata ke session (opsional, buat display aja)
+    const meta = fileQueue.map(f => ({ name: f.name, size: f.size, type: f.type }));
+    sessionStorage.setItem('gdrop_transfer_files', JSON.stringify(meta));
+};
 
 // Run App
 document.addEventListener('DOMContentLoaded', initializeApp);

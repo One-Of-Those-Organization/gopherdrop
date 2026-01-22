@@ -303,47 +303,117 @@ function showTransferProgressUI(files, deviceCount) {
     const overlay = document.getElementById('transfer-progress-overlay');
     if (!overlay) return;
 
-    // Update Header Info
+    // 1. Update Text Header
     document.getElementById('total-items-badge').textContent = `${files.length} files`;
-    document.getElementById('recipient-count').textContent = `${deviceCount} devices`;
+    document.getElementById('recipient-count').textContent = `${deviceCount || 1} devices`;
 
-    // Render Queue (Simple Version)
+    // 2. Render Queue (Card Style cantik)
     const queueContainer = document.getElementById('transfer-queue');
     if (queueContainer) {
-        queueContainer.innerHTML = files.map(file => `
-            <div class="bg-white border border-slate-200 p-4 rounded-2xl flex items-center gap-4">
-                <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-primary">
-                    <span class="material-symbols-outlined">description</span>
+        queueContainer.innerHTML = files.map(file => {
+            // Icon berdasarkan tipe
+            let icon = 'draft';
+            let color = 'text-slate-400 bg-slate-50';
+            if (file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50'; }
+            else if (file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50'; }
+
+            return `
+            <div class="file-card-item bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl ${color} flex items-center justify-center flex-shrink-0">
+                    <span class="material-symbols-outlined text-2xl">${icon}</span>
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="font-bold text-sm text-slate-800 truncate">${file.name}</p>
-                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider" id="status-${file.name.replace(/\s/g, '')}">Pending</p>
+                    <div class="flex justify-between mb-1">
+                        <p class="font-bold text-sm text-slate-800 truncate">${file.name}</p>
+                        <span class="text-[10px] font-bold text-slate-400" id="percent-${file.name.replace(/[^a-zA-Z0-9]/g, '')}">0%</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div id="bar-${file.name.replace(/[^a-zA-Z0-9]/g, '')}" class="h-full bg-primary rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 font-medium mt-1 uppercase tracking-wider" id="status-${file.name.replace(/[^a-zA-Z0-9]/g, '')}">Queued</p>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
+    // 3. Render Mesh Network (Jaring-Jaring)
+    renderMeshNetwork(deviceCount || 1);
+
+    // Show Overlay
     overlay.classList.remove('hidden');
     overlay.classList.add('flex');
 }
 
-function updateFileProgressUI(fileName, percentage) {
-    // Update Text Status per File
-    const safeName = fileName.replace(/\s/g, '');
+// Fungsi Pembantu Render Mesh
+function renderMeshNetwork(count) {
+    const container = document.getElementById('mesh-network-view');
+    if(!container) return;
+
+    // Hapus satelit lama (sisakan center node)
+    const oldNodes = container.querySelectorAll('.mesh-node, .connection-line');
+    oldNodes.forEach(n => n.remove());
+
+    const radius = 180; // Jarak dari tengah
+    const centerX = container.offsetWidth / 2;
+    const centerY = container.offsetHeight / 2;
+
+    for (let i = 0; i < count; i++) {
+        const angle = (i * (360 / count)) * (Math.PI / 180);
+        const x = Math.cos(angle) * radius; // Koordinat relatif
+        const y = Math.sin(angle) * radius;
+
+        // Buat Garis
+        const line = document.createElement('div');
+        line.className = 'connection-line active';
+        line.style.width = `${radius - 40}px`; // Panjang garis
+        line.style.top = '50%';
+        line.style.left = '50%';
+        line.style.transform = `translateY(-50%) rotate(${i * (360 / count)}deg)`;
+        container.appendChild(line);
+
+        // Buat Node Satelit
+        const node = document.createElement('div');
+        node.className = 'mesh-node absolute flex flex-col items-center';
+        node.style.top = `50%`;
+        node.style.left = `50%`;
+        node.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+
+        node.innerHTML = `
+            <div class="w-16 h-16 bg-white rounded-2xl shadow-lg border border-slate-100 flex items-center justify-center mb-2 animate-bounce" style="animation-delay: ${i * 0.2}s">
+                <span class="material-symbols-outlined text-slate-400">smartphone</span>
+            </div>
+            <span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-full uppercase">Connected</span>
+        `;
+        container.appendChild(node);
+    }
+}
+
+window.updateFileProgressUI = function(fileName, percentage) {
+    const safeName = fileName.replace(/[^a-zA-Z0-9]/g, '');
+
+    // Update Text Status
     const statusEl = document.getElementById(`status-${safeName}`);
+    const percentEl = document.getElementById(`percent-${safeName}`);
+    const barEl = document.getElementById(`bar-${safeName}`);
+
     if (statusEl) {
         if(percentage >= 100) {
             statusEl.textContent = "COMPLETED";
-            statusEl.classList.add("text-green-500");
+            statusEl.className = "text-[10px] font-bold text-green-500 mt-1 uppercase tracking-wider";
         } else {
-            statusEl.textContent = `SENDING ${percentage}%`;
+            statusEl.textContent = "SENDING...";
         }
     }
+    if (percentEl) percentEl.textContent = `${percentage}%`;
+    if (barEl) barEl.style.width = `${percentage}%`;
 
-    // Update Main Bar (Simplifikasi: cuma visual gerak)
+    // Update Main Bar
     const mainBar = document.getElementById('main-progress-bar');
-    if(mainBar) mainBar.style.width = `${percentage}%`;
-}
+    const overallText = document.getElementById('overall-percentage');
+    if(mainBar) mainBar.style.width = `${percentage}%`; // Simplifikasi: pake progress file terakhir dulu
+    if(overallText) overallText.textContent = `${percentage}%`;
+};
 
 function endTransferSession() {
     const overlay = document.getElementById('transfer-progress-overlay');
@@ -355,7 +425,106 @@ function endTransferSession() {
     window.location.reload();
 }
 
-// Expose globals
+// ==========================================
+// UPLOAD ZONE LOGIC
+// ==========================================
+
+// 1. Global Click Listener (Event Delegation)
+// Menangani klik tombol "Select Files" dengan aman (Anti-Gagal)
+document.addEventListener('click', function(e) {
+    if (e.target && (e.target.id === 'select-files-btn' || e.target.closest('#select-files-btn'))) {
+        console.log("[UI] Select Files button clicked.");
+
+        let input = document.getElementById('file-upload-input');
+
+        // SAFETY NET: Jika input hilang dari DOM (karena re-render), buat baru secara manual
+        if (!input) {
+            console.warn("[UI] Input element missing. Creating manually...");
+            input = document.createElement('input');
+            input.type = 'file';
+            input.id = 'file-upload-input';
+            input.multiple = true;
+            input.style.display = 'none';
+            document.body.appendChild(input);
+
+            // Pasang listener khusus untuk input buatan ini
+            input.addEventListener('change', function(evt) {
+                if (evt.target.files.length > 0) {
+                    handleFiles(evt.target.files);
+                }
+            });
+        }
+
+        input.click();
+    }
+});
+
+// 2. Global Change Listener (Untuk input bawaan HTML jika ada)
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.id === 'file-upload-input') {
+        if (e.target.files.length > 0) {
+            handleFiles(e.target.files);
+        }
+    }
+});
+
+// 3. Init Drag & Drop (Polling elemen dinamis)
+function initFileUpload() {
+    console.log("[UI] Initializing Drag & Drop...");
+
+    // Cek elemen tiap detik sampai ketemu
+    const checkInterval = setInterval(() => {
+        const dropZone = document.getElementById('upload-zone');
+
+        if (dropZone) {
+            console.log("[UI] Drop Zone found. Listeners attached.");
+            clearInterval(checkInterval);
+
+            dropZone.ondragover = (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-primary', 'bg-blue-50');
+            };
+            dropZone.ondragleave = (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-primary', 'bg-blue-50');
+            };
+            dropZone.ondrop = (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-primary', 'bg-blue-50');
+                handleFiles(e.dataTransfer.files);
+            };
+        }
+    }, 1000);
+}
+
+// 4. Central File Handler
+function handleFiles(files) {
+    console.log("[UI] Processing files:", files);
+
+    // Kirim ke App.js
+    if (window.handleFilesSelected) {
+        window.handleFilesSelected(files);
+
+        // UI Feedback
+        if(window.showToast) window.showToast(`${files.length} files READY to send!`, 'success');
+
+        // Update Teks di Kotak Upload
+        const titleEl = document.querySelector('#upload-zone h4');
+        const descEl = document.querySelector('#upload-zone p');
+
+        if(titleEl) {
+            titleEl.textContent = `${files.length} File(s) Selected`;
+            titleEl.classList.add('text-primary');
+        }
+        if(descEl) descEl.textContent = "Click 'Create Group' above to send.";
+
+    } else {
+        console.error("[UI] Error: App.js not ready (handleFilesSelected missing)");
+    }
+}
+
+// Expose Global
+window.initFileUpload = initFileUpload;
 window.showTransferProgressUI = showTransferProgressUI;
 window.updateFileProgressUI = updateFileProgressUI;
 window.endTransferSession = endTransferSession;
