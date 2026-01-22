@@ -2,6 +2,8 @@
  * GopherDrop - Main Application
  */
 
+import { initAuth } from "./auth.js";
+
 // Global WebSocket Connection
 let signalingSocket = null;
 let isSocketConnected = false;
@@ -35,6 +37,12 @@ async function loadComponent(elementId, componentPath) {
 
 // Initialize Components
 async function initializeApp() {
+    // Initialize Authentication
+    const token = await initAuth(); // token langsung dari auth.js
+    if (token) {
+        connectToSignalingServer(token);
+    }
+
     // Load sidebar
     await loadComponent('sidebar-container', 'components/sidebar.html');
 
@@ -48,17 +56,19 @@ async function initializeApp() {
 
     // Highlight active nav item
     highlightActiveNav();
+    // Start network speed indicator
+    startNetworkSpeedIndicator();
 
     // Initialize devices (only if function exists and container exists)
     if (typeof renderDevices === 'function' && document.getElementById('device-list')) {
         renderDevices(sampleDevices, 'device-list');
     }
 
-    // Check for existing token and connect if available
-    const token = localStorage.getItem('gdrop_token');
-    if (token) {
-        connectToSignalingServer(token);
-    }
+    // // Check for existing token and connect if available -> Replaced by auth.js initAuth call
+    // const token = localStorage.getItem('gdrop_token');
+    // if (token) {
+    //     connectToSignalingServer(token);
+    // }
 }
 
 // Highlight Active Navigation
@@ -79,6 +89,22 @@ function highlightActiveNav() {
             item.classList.remove('active');
         }
     });
+}
+
+// ==========================================
+// Network Speed Indicator
+// ==========================================
+
+function startNetworkSpeedIndicator() {
+    const speedElements = document.querySelectorAll('[data-network-speed]');
+    if (!speedElements.length) return;
+
+    setInterval(() => {
+        const speed = (8 + Math.random() * 6).toFixed(1);
+        speedElements.forEach(el => {
+            el.textContent = `${speed} MB/s`;
+        });
+    }, 1500);
 }
 
 // ==========================================
@@ -162,12 +188,12 @@ function setDiscoverable(isDiscoverable) {
 // Expose setDiscoverable to global scope for HTML onclick
 window.setDiscoverable = setDiscoverable;
 
-// Listen for auth ready event from auth.js
-window.addEventListener('gdrop:auth-ready', (e) => {
-    if (e.detail && e.detail.token) {
-        connectToSignalingServer(e.detail.token);
-    }
-});
+// Listen for auth ready event from auth.js -> Deleted cuz duplicate
+// window.addEventListener('gdrop:auth-ready', (e) => {
+//     if (e.detail && e.detail.token) {
+//         connectToSignalingServer(e.detail.token);
+//     }
+// });
 
 // Run on DOM Ready
 document.addEventListener('DOMContentLoaded', initializeApp);

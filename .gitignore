@@ -2,6 +2,7 @@
 # DATABASE FILES
 ############################
 *.db
+db/data.db
 *.sqlite
 *.sqlite3
 *.mdb
