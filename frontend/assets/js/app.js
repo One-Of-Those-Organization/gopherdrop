@@ -92,20 +92,30 @@ function highlightActiveNav() {
 }
 
 // ==========================================
-// Network Speed Indicator
+// Network Speed Indicator (DISPLAY ONLY)
 // ==========================================
+
+let currentSpeedMbps = 0;
 
 function startNetworkSpeedIndicator() {
     const speedElements = document.querySelectorAll('[data-network-speed]');
     if (!speedElements.length) return;
 
     setInterval(() => {
-        const speed = (8 + Math.random() * 6).toFixed(1);
         speedElements.forEach(el => {
-            el.textContent = `${speed} MB/s`;
+            el.textContent = `${currentSpeedMbps.toFixed(2)} Mbps`;
         });
+    }, 1000);
+
+    setInterval(() => {
+        currentSpeedMbps = 10 + Math.random() * 10;
     }, 1500);
 }
+
+// NET SPEED STILL DUMMY FUNCTION FOR NOW, IT WILL BE REPLACED WHEN WEBRTC DATA CHANNEL IS IMPLEMENTED
+window.updateNetworkSpeed = function (mbps) {
+    currentSpeedMbps = mbps;
+};
 
 // ==========================================
 // WebSocket & Signaling Logic
