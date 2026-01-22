@@ -30,7 +30,9 @@ body {
   font-family: "Space Grotesk", sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
-  transition: background-color 0.3s, color 0.3s;
+  transition:
+    background-color 0.3s,
+    color 0.3s;
 }
 
 /* Card Components */
@@ -240,7 +242,7 @@ body {
 }
 
 .toggle-switch::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -295,35 +297,81 @@ html.dark .settings-card {
    ========================================== */
 
 /* Text Colors */
-html.dark .text-slate-900 { color: var(--text-main) !important; }
-html.dark .text-slate-800 { color: var(--text-main) !important; }
-html.dark .text-slate-700 { color: #cbd5e1 !important; }
-html.dark .text-slate-600 { color: var(--text-muted) !important; }
-html.dark .text-slate-500 { color: var(--text-muted) !important; }
-html.dark .text-slate-400 { color: #64748b !important; }
-html.dark .text-gray-900 { color: var(--text-main) !important; }
-html.dark .text-gray-700 { color: #cbd5e1 !important; }
-html.dark .text-gray-500 { color: var(--text-muted) !important; }
-html.dark .text-gray-400 { color: #64748b !important; }
+html.dark .text-slate-900 {
+  color: var(--text-main) !important;
+}
+html.dark .text-slate-800 {
+  color: var(--text-main) !important;
+}
+html.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+html.dark .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+html.dark .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+html.dark .text-slate-400 {
+  color: #64748b !important;
+}
+html.dark .text-gray-900 {
+  color: var(--text-main) !important;
+}
+html.dark .text-gray-700 {
+  color: #cbd5e1 !important;
+}
+html.dark .text-gray-500 {
+  color: var(--text-muted) !important;
+}
+html.dark .text-gray-400 {
+  color: #64748b !important;
+}
 
 /* Background Colors */
-html.dark .bg-white { background-color: var(--card-bg) !important; }
-html.dark .bg-slate-50 { background-color: #0f172a !important; }
-html.dark .bg-slate-100 { background-color: #1e293b !important; }
-html.dark .bg-slate-200 { background-color: #334155 !important; }
-html.dark .bg-gray-50 { background-color: #0f172a !important; }
-html.dark .bg-gray-100 { background-color: #1e293b !important; }
+html.dark .bg-white {
+  background-color: var(--card-bg) !important;
+}
+html.dark .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+html.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+html.dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+html.dark .bg-gray-50 {
+  background-color: #0f172a !important;
+}
+html.dark .bg-gray-100 {
+  background-color: #1e293b !important;
+}
 
 /* Border Colors */
-html.dark .border-slate-200 { border-color: var(--border-color) !important; }
-html.dark .border-slate-100 { border-color: var(--border-color) !important; }
-html.dark .border-gray-200 { border-color: var(--border-color) !important; }
-html.dark .border-gray-100 { border-color: var(--border-color) !important; }
+html.dark .border-slate-200 {
+  border-color: var(--border-color) !important;
+}
+html.dark .border-slate-100 {
+  border-color: var(--border-color) !important;
+}
+html.dark .border-gray-200 {
+  border-color: var(--border-color) !important;
+}
+html.dark .border-gray-100 {
+  border-color: var(--border-color) !important;
+}
 
 /* Hover States */
-html.dark .hover\:bg-slate-100:hover { background-color: #334155 !important; }
-html.dark .hover\:bg-slate-50:hover { background-color: #1e293b !important; }
-html.dark .hover\:bg-gray-100:hover { background-color: #334155 !important; }
+html.dark .hover\:bg-slate-100:hover {
+  background-color: #334155 !important;
+}
+html.dark .hover\:bg-slate-50:hover {
+  background-color: #1e293b !important;
+}
+html.dark .hover\:bg-gray-100:hover {
+  background-color: #334155 !important;
+}
 
 /* ==========================================
    Dark Mode - Component Overrides
@@ -360,7 +408,12 @@ html.dark header {
   border-color: var(--border-color) !important;
 }
 
-html.dark h1, html.dark h2, html.dark h3, html.dark h4, html.dark h5, html.dark h6 {
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
   color: var(--text-main);
 }
 
@@ -602,7 +655,7 @@ html.dark button:not(.bg-primary):not(.theme-btn):hover {
 }
 
 /* Settings page header typography */
-html.dark h1, 
+html.dark h1,
 html.dark .font-bold:not(.text-primary):not(.text-white) {
   color: var(--text-main);
 }
@@ -683,7 +736,7 @@ html.dark .border-dashed:hover {
     height: 100vh;
     overflow-y: auto;
   }
-  
+
   #sidebar-container aside {
     min-height: 100vh;
   }
@@ -756,4 +809,150 @@ html.dark .send-files-container {
 
 html.dark .edit-group-actions {
   background-color: #1e293b;
+}
+
+/* ==========================================
+   Transfer Review Overlay (Glassmorphism)
+   ========================================== */
+
+/* Glass Overlay Background */
+.glass-overlay {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  z-index: 9999; /* Ensure it's on top of everything */
+}
+
+html.dark .glass-overlay {
+  background: rgba(15, 23, 42, 0.85); /* Dark mode glass */
+}
+
+/* File Card Style */
+.file-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 208, 255, 0.1);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+html.dark .file-card {
+  background: #1e293b;
+  border: 1px solid rgba(0, 208, 255, 0.1);
+}
+
+.file-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -10px rgba(0, 208, 255, 0.15);
+}
+
+/* Device Node Animation */
+.device-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.5s ease-out;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeUp 0.5s forwards;
+}
+
+@keyframes fadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulse Button Animation */
+.pulse-btn {
+  box-shadow: 0 0 0 0 rgba(0, 208, 255, 0.4);
+  animation: pulse-shadow 2s infinite;
+}
+
+@keyframes pulse-shadow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 208, 255, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 20px rgba(0, 208, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 208, 255, 0);
+  }
+}
+
+/* Visual Connection Line */
+.network-line {
+  position: absolute;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  height: 1px;
+  width: 100%;
+  top: 50%;
+  opacity: 0.3;
+}
+/* ==========================================
+   Transfer Progress Page Styles
+   ========================================== */
+.glass-panel {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.dark .glass-panel {
+    background: rgba(30, 41, 59, 0.7);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.progress-bar-main {
+    height: 12px;
+    background: rgba(0, 208, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill-main {
+    height: 100%;
+    background: linear-gradient(90deg, #00d0ff, #0088ff);
+    border-radius: 6px;
+    transition: width 0.3s ease;
+}
+
+.network-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.data-stream {
+    stroke: var(--primary);
+    stroke-width: 2;
+    fill: none;
+    stroke-dasharray: 8 12;
+    animation: flow 1s linear infinite;
+}
+
+@keyframes flow {
+    from { stroke-dashoffset: 20; }
+    to { stroke-dashoffset: 0; }
+}
+
+.host-pulse {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--primary);
+    opacity: 0.3;
+    animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+}
+
+@keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.4; }
+    100% { transform: scale(1.6); opacity: 0; }
 }

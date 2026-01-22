@@ -1,0 +1,103 @@
+############################
+# DATABASE FILES
+############################
+*.db
+db/data.db
+*.sqlite
+*.sqlite3
+*.mdb
+*.accdb
+*.sql
+*.dump
+*.bak
+*.backup
+/data/
+/database/
+/db/
+
+############################
+# ENV / SECRETS
+############################
+.env
+.env.*
+*.env
+
+############################
+# BUILD / BINARIES
+############################
+*.exe
+*.dll
+*.so
+*.dylib
+*.out
+*.bin
+
+/build/
+/dist/
+/target/
+/out/
+/bin/
+
+############################
+# NODE / FRONTEND
+############################
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+############################
+# PYTHON
+############################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+############################
+# JAVA / ANDROID / GRADLE
+############################
+.gradle/
+build/
+*.class
+*.jar
+*.war
+*.ear
+local.properties
+
+############################
+# ANDROID STUDIO / NDK
+############################
+.cxx/
+.externalNativeBuild/
+captures/
+
+############################
+# EDITORS / IDE
+############################
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+############################
+# OS FILES
+############################
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+############################
+# LOGS / TEMP
+############################
+*.log
+logs/
+tmp/
+temp/
