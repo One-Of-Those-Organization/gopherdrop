@@ -807,6 +807,10 @@ html.dark .send-files-container {
   background-color: #f8fafc;
 }
 
+html.dark .edit-group-actions {
+  background-color: #1e293b;
+}
+
 /* ==========================================
    Transfer Review Overlay (Glassmorphism)
    ========================================== */
