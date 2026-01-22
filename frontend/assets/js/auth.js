@@ -132,12 +132,12 @@ export async function initAuth() {
                 // If the server doesn't recognize us (DB reset?), clear creds and re-register
                 if (loginData.message === "User not found") {
                     console.warn('[Auth] User not found on server. Clearing credentials and re-registering...');
-                    clearCredentials();
+                    localStorage.clear()
                     return await initAuth();
                 }
                 if (loginData.message === "Authentication failed") {
                     console.warn('[Auth] Auth failed (Key mismatch?). Clearing credentials and re-registering...');
-                    clearCredentials();
+                    localStorage.clear()
                     return await initAuth();
                 }
                 throw new Error(loginData.message || "Login failed");
