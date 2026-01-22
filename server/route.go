@@ -177,6 +177,7 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		s.MUserMu.Lock()
 
 		muser := &ManagedUser{
+			MinUser:   MinimalUser{user.Username, user.PublicKey}, // to send to network
 			User:      user,
 			Conn:      conn,
 			JWTExpiry: expTime,

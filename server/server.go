@@ -11,23 +11,57 @@ import (
 	"time"
 )
 
+type MinimalUser struct {
+	Username  string `json:"username"`
+	PublicKey string `json:"public_key"`
+}
+
 type ManagedUser struct {
-	User      User            `json:"user"`
+	MinUser   MinimalUser     `json:"user"`
+	User      User            `json:"-"`
 	Conn      *websocket.Conn `json:"-"`
 	JWTExpiry time.Time       `json:"-"`
 	// NOTE: will add the webrtc stuff later here
 }
 
+type Transaction struct {
+	ID      string               `json:"id"`
+	Sender  *ManagedUser         `json:"-"`
+	Targets []*TransactionTarget `json:"-"`
+	Files   []*FileInfo          `json:"files"`
+	Started bool                 `json:"started"`
+}
+
+type TargetStatus int
+const (
+	Pending   TargetStatus = iota
+	Accepted
+	Declined
+)
+
+type TransactionTarget struct {
+	User   *ManagedUser
+	Status TargetStatus
+}
+
+type FileInfo struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+	Type string `json:"type"`
+}
+
 type Server struct {
-	Url         string
-	App         *fiber.App
-	DB          *gorm.DB
-	Pass        string
-	Challenges  map[string]time.Time
-	ChallengeMu sync.RWMutex
-	MUser       map[*websocket.Conn]*ManagedUser
-	MUserMu     sync.RWMutex
-	CachedUser  []*ManagedUser
+	Url           string
+	App           *fiber.App
+	DB            *gorm.DB
+	Pass          string
+	Challenges    map[string]time.Time
+	ChallengeMu   sync.RWMutex
+	MUser         map[*websocket.Conn]*ManagedUser
+	MUserMu       sync.RWMutex
+	CachedUser    []*ManagedUser
+	Transactions  map[string]*Transaction
+	TransactionMu sync.RWMutex
 }
 
 func InitServer(url string, password string) *Server {
@@ -41,11 +75,12 @@ func InitServer(url string, password string) *Server {
 		AllowCredentials: false,
 	}))
 	return &Server{
-		App:        app,
-		Url:        url,
-		Pass:       password,
-		Challenges: make(map[string]time.Time),
-		MUser:      make(map[*websocket.Conn]*ManagedUser),
+		App:          app,
+		Url:          url,
+		Pass:         password,
+		Challenges:   make(map[string]time.Time),
+		MUser:        make(map[*websocket.Conn]*ManagedUser),
+		Transactions: make(map[string]*Transaction),
 	}
 }
 
