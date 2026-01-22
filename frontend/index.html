@@ -180,23 +180,37 @@
     
     <!-- Mobile Menu Script -->
     <script>
+        // Elements
+        const sidebarContainer = document.getElementById('sidebar-container');
+        const overlay = document.getElementById('sidebar-overlay');
+        const menuBtn = document.getElementById('mobile-menu-btn');
+
+        // Function to Open
         function openMobileMenu() {
-            const sidebar = document.querySelector('[data-mobile-menu]');
-            const overlay = document.getElementById('sidebar-overlay');
-            sidebar.classList.remove('-translate-x-full');
+            sidebarContainer.classList.remove('-translate-x-full');
             overlay.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
         }
-        
+
+        // Function to Close
         function closeMobileMenu() {
-            const sidebar = document.querySelector('[data-mobile-menu]');
-            const overlay = document.getElementById('sidebar-overlay');
-            sidebar.classList.add('-translate-x-full');
+            sidebarContainer.classList.add('-translate-x-full');
             overlay.classList.add('hidden');
             document.body.style.overflow = '';
         }
-        
-        document.getElementById('mobile-menu-btn')?.addEventListener('click', openMobileMenu);
+
+        // Event Listeners
+        if (menuBtn) {
+            menuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openMobileMenu();
+            });
+        }
+
+        // Close when clicking overlay
+        if (overlay) {
+            overlay.addEventListener('click', closeMobileMenu);
+        }
     </script>
 </body>
 </html>
