@@ -1,10 +1,11 @@
 package server
 
 import (
+	"time"
+
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 	"github.com/mitchellh/mapstructure"
-	"time"
 )
 
 type WSType int
@@ -36,9 +37,9 @@ type WSMessage struct {
 }
 
 type WebRTCSignal struct {
-	TransactionID string `json:"transaction_id"`
-	TargetKey     string `json:"target_key"`
-	Data          any    `json:"data"`
+	TransactionID string `json:"transaction_id" mapstructure:"transaction_id"`
+	TargetKey     string `json:"target_key" mapstructure:"target_key"`
+	Data          any    `json:"data" mapstructure:"data"`
 }
 
 func sendWS(c *websocket.Conn, t WSType, data any) {
@@ -145,8 +146,8 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			continue
 		case USER_SHARE_TARGET:
 			var data struct {
-				TransactionID string   `json:"transaction_id"`
-				PublicKey     []string `json:"public_keys"`
+				TransactionID string   `mapstructure:"transaction_id"`
+				PublicKey     []string `mapstructure:"public_keys"`
 			}
 
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
@@ -154,7 +155,16 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				continue
 			}
 
-			if mUser != s.Transactions[data.TransactionID].Sender {
+			s.TransactionMu.RLock()
+			tx, exists := s.Transactions[data.TransactionID]
+			s.TransactionMu.RUnlock()
+
+			if !exists || tx == nil {
+				sendWS(mUser.Conn, ERROR, "transaction not found or expired")
+				continue
+			}
+
+			if mUser.User.PublicKey != tx.Sender.User.PublicKey {
 				sendWS(mUser.Conn, ERROR, "not authorized to modify this transaction")
 				continue
 			}
@@ -177,7 +187,9 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			}
 
 			s.TransactionMu.Lock()
-			s.Transactions[data.TransactionID].Targets = targets
+			if s.Transactions[data.TransactionID] != nil {
+				s.Transactions[data.TransactionID].Targets = targets
+			}
 			s.TransactionMu.Unlock()
 
 			// Notify targets
@@ -187,18 +199,18 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 					Transaction *Transaction `json:"transaction"`
 					Sender      string       `json:"sender"`
 				}{
-					Transaction: s.Transactions[data.TransactionID],
+					Transaction: tx,
 					Sender:      mUser.MinUser.Username,
 				})
 			}
 
-			sendWS(mUser.Conn, USER_SHARE_TARGET, s.Transactions[data.TransactionID])
+			sendWS(mUser.Conn, USER_SHARE_TARGET, tx)
 			s.TransactionMu.RUnlock()
 			continue
 		case FILE_SHARE_TARGET:
 			var data struct {
-				TransactionID string     `json:"transaction_id"`
-				Files         []FileInfo `json:"files"`
+				TransactionID string     `mapstructure:"transaction_id"`
+				Files         []FileInfo `mapstructure:"files"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
 				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_TARGET")
@@ -238,8 +250,8 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			continue
 		case TRANSACTION_SHARE_ACCEPT:
 			var data struct {
-				TransactionID string `json:"transaction_id"`
-				Accept        bool   `json:"accept"`
+				TransactionID string `mapstructure:"transaction_id"`
+				Accept        bool   `mapstructure:"files"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
 				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_ACCEPT")
@@ -271,7 +283,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 
 		case START_TRANSACTION:
 			var data struct {
-				TransactionID string `json:"transaction_id"`
+				TransactionID string `mapstructure:"transaction_id"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
 				sendWS(mUser.Conn, ERROR, "invalid data for START_TRANSACTION")
