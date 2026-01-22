@@ -46,13 +46,11 @@ func SetupRegister(s *Server, group fiber.Router) {
 		}
 
 		newUser := User{
-			MinimalUser: MinimalUser{
-				Username:  b.Username,
-				PublicKey: b.PublicKey,
-			},
+			Username:       b.Username,
+			PublicKey:      b.PublicKey,
 			IsDiscoverable: true,
+			CreatedAt:      time.Now(),
 		}
-		newUser.CreatedAt = time.Now()
 
 		if err := s.DB.Create(&newUser).Error; err != nil {
 			return resp(c, cret(false, "Username might already exist", nil), fiber.StatusBadRequest)
