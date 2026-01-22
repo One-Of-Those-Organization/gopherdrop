@@ -57,8 +57,9 @@ async function initializeApp() {
 
     // Highlight active nav item
     highlightActiveNav();
-    // Start network speed indicator
-    startNetworkSpeedIndicator();
+    highlightActiveNav();
+    // Fetch and display current network SSID
+    fetchNetworkInfo();
 
     // Initialize devices (only if function exists and container exists)
     if (typeof renderDevices === 'function' && document.getElementById('device-list')) {
@@ -93,30 +94,41 @@ function highlightActiveNav() {
 }
 
 // ==========================================
-// Network Speed Indicator (DISPLAY ONLY)
+// Network Info & SSID Detection
 // ==========================================
 
-let currentSpeedMbps = 0;
+// ==========================================
+// Network Info & SSID Detection
+// ==========================================
 
-function startNetworkSpeedIndicator() {
-    const speedElements = document.querySelectorAll('[data-network-speed]');
-    if (!speedElements.length) return;
+async function fetchNetworkInfo() {
+    try {
+        const response = await fetch('/api/v1/network');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data && data.data.ssid) {
+                const ssid = data.data.ssid;
 
-    setInterval(() => {
-        speedElements.forEach(el => {
-            el.textContent = `${currentSpeedMbps.toFixed(2)} Mbps`;
-        });
-    }, 1000);
+                // Update Desktop SSID
+                const ssidEl = document.getElementById('network-ssid');
+                if (ssidEl) ssidEl.textContent = ssid;
 
-    setInterval(() => {
-        currentSpeedMbps = 10 + Math.random() * 10;
-    }, 1500);
+                // Update Mobile SSID
+                const ssidMobileEl = document.getElementById('network-ssid-mobile');
+                if (ssidMobileEl) ssidMobileEl.textContent = ssid;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch network info:', error);
+
+        const fallbackText = "Unknown Network";
+        const ssidEl = document.getElementById('network-ssid');
+        if (ssidEl) ssidEl.textContent = fallbackText;
+
+        const ssidMobileEl = document.getElementById('network-ssid-mobile');
+        if (ssidMobileEl) ssidMobileEl.textContent = fallbackText;
+    }
 }
-
-// NET SPEED STILL DUMMY FUNCTION FOR NOW, IT WILL BE REPLACED WHEN WEBRTC DATA CHANNEL IS IMPLEMENTED
-window.updateNetworkSpeed = function (mbps) {
-    currentSpeedMbps = mbps;
-};
 
 // ==========================================
 // WebSocket & Signaling Logic
@@ -187,24 +199,24 @@ function handleSignalingMessage(msg) {
     switch (msg.type) {
         case WS_TYPE.USER_SHARE_LIST:
             console.log("Dapat User List:", msg.data);
-            
+
             // Update device list in UI
             if (typeof updateDeviceListFromBackend === 'function') {
                 updateDeviceListFromBackend(msg.data);
             }
             break;
-            
+
         case 2: // CONFIG_DISCOVERABLE
-             console.log('[WS] Discoverable status updated');
-             break;
-             
+            console.log('[WS] Discoverable status updated');
+            break;
+
         case 1: // ERROR
-             console.error('[WS] Server error:', msg.data);
-             // TODO: Tampilkan toast/alert error ke user (penting untuk IMK)
-             break;
-             
+            console.error('[WS] Server error:', msg.data);
+            // TODO: Tampilkan toast/alert error ke user (penting untuk IMK)
+            break;
+
         default:
-             console.log("Unhandled message type:", msg.type);
+            console.log("Unhandled message type:", msg.type);
     }
 }
 

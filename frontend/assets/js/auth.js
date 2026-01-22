@@ -1,7 +1,7 @@
 // ==========================================
 // Constants and Imports
 // ==========================================
-import {bufferToBase64, base64ToBuffer, generateKeyPair, initDeviceID, savePrivateKey, importPrivateKey} from './helper.js';
+import { bufferToBase64, base64ToBuffer, generateKeyPair, initDeviceID, savePrivateKey, importPrivateKey } from './helper.js';
 
 // LocalStorage Keys
 const STORAGE_KEYS = {
@@ -41,7 +41,7 @@ function getPublicKey() {
 }
 
 function getDeviceName() {
-    return localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+    return localStorage.getItem('gdrop_device_name') || localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
 }
 
 function isRegistered() {
@@ -90,14 +90,17 @@ export async function initAuth() {
 
             const response = await fetch(ENDPOINTS.REGISTER, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     username: getDeviceName(),
                     public_key: publicKeyBase64
                 })
             });
 
-            if (!response.ok) throw new Error('Registration failed');
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Registration failed: ${errText}`);
+            }
 
             // Attempt login after successful registration
             return await initAuth();
@@ -114,7 +117,7 @@ export async function initAuth() {
             // 1. Get Challenge from server
             const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
             if (!challengeRes.ok) throw new Error('Gagal konek ke Laptop (Challenge)');
-            
+
             const challengeData = await challengeRes.json();
             const challengeBase64 = challengeData.data;
 
@@ -135,10 +138,10 @@ export async function initAuth() {
 
             const loginData = await loginRes.json();
 
-            if (loginRes.ok && loginData.token) {
-                localStorage.setItem('gdrop_token', loginData.token);
+            if (loginRes.ok && loginData.data) {
+                localStorage.setItem('gdrop_token', loginData.data);
                 // alert("Info: Berhasil Login!"); // Uncomment untuk konfirmasi
-                return loginData.token;
+                return loginData.data;
             }
 
             return null;

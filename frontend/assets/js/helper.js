@@ -70,18 +70,43 @@ export async function importPrivateKey() {
 // ==========================================
 // Device ID Functions
 // ==========================================
+// ==========================================
+// Device ID Functions
+// ==========================================
 export async function initDeviceID() {
-    let deviceName = getDeviceName();
+    // 1. Ensure Unique Device ID (UUID)
+    let deviceId = localStorage.getItem('gdrop_device_id');
+    if (!deviceId) {
+        // Fallback if crypto.randomUUID is missing (e.g. non-secure context)
+        if (typeof crypto.randomUUID === 'function') {
+            deviceId = crypto.randomUUID();
+        } else {
+            deviceId = `device-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+        localStorage.setItem('gdrop_device_id', deviceId);
+    }
+
+    // 2. Ensure Readable Device Name (with unique suffix to prevent DB collisions)
+    let deviceName = localStorage.getItem('gdrop_device_name');
     if (!deviceName) {
-        deviceName = crypto.randomUUID();
-        localStorage.setItem('gdrop_device_id', deviceName);
+        const userAgent = navigator.userAgent;
+        let platform = "Browser";
+        if (userAgent.includes("Win")) platform = "Windows";
+        else if (userAgent.includes("Mac")) platform = "Mac";
+        else if (userAgent.includes("Linux")) platform = "Linux";
+        else if (userAgent.includes("Android")) platform = "Android";
+        else if (userAgent.includes("iPhone")) platform = "iPhone";
+
+        const browser = userAgent.includes("Chrome") ? "Chrome" :
+            userAgent.includes("Firefox") ? "Firefox" :
+                userAgent.includes("Safari") ? "Safari" : "Web";
+
+        // Append short random string to ensure uniqueness in DB
+        const suffix = Math.random().toString(36).substr(2, 4).toUpperCase();
+        deviceName = `${platform} ${browser} (${suffix})`;
+
+        localStorage.setItem('gdrop_device_name', deviceName);
     }
 
-    if (!localStorage.getItem('gdrop_device_name')) {
-        // NOTE: CHANGE THIS TO A BETTER DEFAULT NAME IF NEEDED
-        const defaultName = navigator.userAgent.split(' ')[0];
-        localStorage.setItem('gdrop_device_name', defaultName);
-    }
-
-    return { deviceName, name: localStorage.getItem('gdrop_device_name') };
+    return { deviceId, deviceName };
 }
