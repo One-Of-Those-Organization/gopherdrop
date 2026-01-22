@@ -114,7 +114,7 @@ export async function initAuth() {
             // 1. Get Challenge from server
             const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
             if (!challengeRes.ok) throw new Error('Gagal konek ke Laptop (Challenge)');
-            
+
             const challengeData = await challengeRes.json();
             const challengeBase64 = challengeData.data;
 
@@ -133,12 +133,10 @@ export async function initAuth() {
                 })
             });
 
-            const loginData = await loginRes.json();
-
-            if (loginRes.ok && loginData.token) {
-                localStorage.setItem('gdrop_token', loginData.token);
-                // alert("Info: Berhasil Login!"); // Uncomment untuk konfirmasi
-                return loginData.token;
+            const loginJson = await loginRes.json();
+            if (loginJson.success) {
+                localStorage.setItem('gdrop_token', loginJson.data);
+                return loginJson.data;
             }
 
             return null;
