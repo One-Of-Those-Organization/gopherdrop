@@ -46,13 +46,13 @@
             <div>
                 <h2 class="text-2xl md:text-3xl font-bold text-slate-900">Local Network</h2>
                 <p class="text-slate-500 font-medium text-sm md:text-base">
-                    Scanning for devices on <span class="text-primary font-bold">Office_WiFi_5G</span>
+                    Scanning for devices on <span class="text-primary font-bold" data-network-ssid>Checking...</span>
                 </p>
             </div>
             <div class="flex gap-4">
                 <div class="bg-white px-4 md:px-5 py-2 md:py-2.5 rounded-full border border-slate-200 flex items-center gap-2 md:gap-3 shadow-sm text-slate-700">
                     <span class="material-symbols-outlined text-primary text-lg md:text-xl">wifi</span>
-                    <span class="text-xs md:text-sm font-semibold">12.5 MB/s</span>
+                    <span class="text-xs md:text-sm font-semibold" data-network-speed>-- MB/s</span>
                 </div>
             </div>
         </header>
@@ -63,12 +63,12 @@
                 <div>
                     <h2 class="text-xl font-bold text-slate-900">Local Network</h2>
                     <p class="text-slate-500 text-xs">
-                        Scanning on <span class="text-primary font-bold">Office_WiFi_5G</span>
+                        Scanning on <span class="text-primary font-bold" data-network-ssid>Checking...</span>
                     </p>
                 </div>
                 <div class="bg-white px-3 py-1.5 rounded-full border border-slate-200 flex items-center gap-2 shadow-sm">
                     <span class="material-symbols-outlined text-primary text-base">wifi</span>
-                    <span class="text-xs font-semibold text-slate-700">12.5 MB/s</span>
+                    <span class="text-xs font-semibold text-slate-700" data-network-speed>-- MB/s</span>
                 </div>
             </div>
         </div>
@@ -81,7 +81,7 @@
                     <div class="flex items-center gap-3">
                         <h3 class="text-[10px] lg:text-sm font-black uppercase tracking-[0.1em] lg:tracking-[0.2em] text-slate-400">Nearby Devices</h3>
                         <div class="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-[10px] font-bold" id="device-count">
-                            18 FOUND
+                            Searching...
                         </div>
                     </div>
                     <button class="flex items-center justify-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm w-full sm:w-auto" id="create-group-btn">
@@ -94,6 +94,10 @@
                 <!-- Device Cards Grid (Rendered by JS) -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-6 mb-4 lg:mb-8" id="device-list">
                     <!-- Devices will be rendered here by components.js -->
+                    <div class="col-span-full py-12 text-center text-slate-400">
+                        <span class="material-symbols-outlined text-4xl mb-2">radar</span>
+                        <p>Scanning for devices...</p>
+                    </div>
                 </div>
 
                 <!-- Pagination (Rendered by JS) -->
@@ -168,7 +172,9 @@
     <!-- Scripts -->
     <script src="assets/js/theme.js"></script>
     <script src="assets/js/auth.js"></script>
+    <script src="assets/js/ws.js"></script>
     <script src="assets/js/components.js"></script>
+    <script src="assets/js/webrtc.js"></script>
     <script src="assets/js/app.js"></script>
     
     <!-- Mobile Menu Script -->

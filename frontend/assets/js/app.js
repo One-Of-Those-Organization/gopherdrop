@@ -5,7 +5,6 @@
 // Detect base path based on current location
 function getBasePath() {
     const path = window.location.pathname;
-    // If we're in a subdirectory like /pages/, go up one level
     if (path.includes('/pages/')) {
         return '../';
     }
@@ -16,7 +15,7 @@ function getBasePath() {
 async function loadComponent(elementId, componentPath) {
     const container = document.getElementById(elementId);
     if (!container) return;
-    
+
     try {
         const basePath = getBasePath();
         const fullPath = basePath + componentPath;
@@ -29,20 +28,67 @@ async function loadComponent(elementId, componentPath) {
     }
 }
 
+// Fetch and display Network SSID
+async function loadNetworkInfo() {
+    try {
+        const response = await fetch('/api/v1/network');
+        if (response.ok) {
+            const json = await response.json();
+            // Data format: { success: true, message: "...", data: { ssid: "..." } }
+            if (json.success && json.data && json.data.ssid) {
+                const ssidEls = document.querySelectorAll('[data-network-ssid]');
+                ssidEls.forEach(el => el.textContent = json.data.ssid);
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch network info:', e);
+        const ssidEls = document.querySelectorAll('[data-network-ssid]');
+        ssidEls.forEach(el => el.textContent = 'Local Network');
+    }
+}
+
 // Initialize Components
 async function initializeApp() {
-    // Load sidebar
+    // Load components
     await loadComponent('sidebar-container', 'components/sidebar.html');
-    
-    // Load upload zone (only if container exists)
     await loadComponent('upload-zone-container', 'components/upload-zone.html');
-    
-    // Highlight active nav item
+
     highlightActiveNav();
-    
-    // Initialize devices (only if function exists and container exists)
-    if (typeof renderDevices === 'function' && document.getElementById('device-list')) {
-        renderDevices(sampleDevices, 'device-list');
+
+    // 1. Fetch Network Info
+    loadNetworkInfo();
+
+    // 2. Initialize Auth & WebSocket
+    if (window.GopherDropAuth && window.GopherDropAuth.initAuth) {
+        await window.GopherDropAuth.initAuth();
+
+        // After auth init, check if we are logged in so we can connect WS
+        if (window.GopherDropAuth.isRegistered()) {
+            console.log('[App] Registered, attempting auto-login to get token...');
+            const loginResult = await window.GopherDropAuth.autoLogin();
+
+            if (loginResult.success && loginResult.data && loginResult.data.data) {
+                const token = loginResult.data.data; // Structure: { ..., data: "jwt-token-string" }
+                // Connect WebSocket
+                if (window.GopherSocket) {
+                    window.GopherSocket.connect(token);
+                }
+                // Init WebRTC
+                if (window.initWebRTC) {
+                    window.initWebRTC();
+                }
+            } else {
+                console.warn('[App] Login failed, cannot connect to WS');
+                // Maybe redirect to register page?
+            }
+        } else {
+            // Redirect to register if needed, or show modal
+            console.log('[App] Not registered.');
+            // For now, since we are on dashboard, maybe prompt registration?
+            if (!window.location.pathname.includes('register')) {
+                // Register flow logic here if needed
+            }
+        }
     }
 }
 
@@ -50,10 +96,9 @@ async function initializeApp() {
 function highlightActiveNav() {
     const currentPath = window.location.pathname;
     const navItems = document.querySelectorAll('.nav-item');
-    
+
     navItems.forEach(item => {
         const href = item.getAttribute('href');
-        // Check if href matches current page
         if (currentPath.includes('groups') && href.includes('groups')) {
             item.classList.add('active');
         } else if (currentPath.includes('settings') && href.includes('settings')) {
