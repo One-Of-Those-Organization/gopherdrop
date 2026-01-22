@@ -1,8 +1,9 @@
-/**
- * GopherDrop - Main Application
- */
-
 import { initAuth } from "./auth.js";
+
+const WS_TYPE = {
+    START_SHARING: 3,
+    USER_SHARE_LIST: 4,
+}
 
 // Global WebSocket Connection
 let signalingSocket = null;
@@ -61,7 +62,7 @@ async function initializeApp() {
 
     // Initialize devices (only if function exists and container exists)
     if (typeof renderDevices === 'function' && document.getElementById('device-list')) {
-        renderDevices(sampleDevices, 'device-list');
+        renderDevices([], 'device-list');
     }
 
     // // Check for existing token and connect if available -> Replaced by auth.js initAuth call
@@ -121,6 +122,7 @@ window.updateNetworkSpeed = function (mbps) {
 // WebSocket & Signaling Logic
 // ==========================================
 
+// Connect to Signaling Server
 function connectToSignalingServer(token) {
     if (signalingSocket && (signalingSocket.readyState === WebSocket.OPEN || signalingSocket.readyState === WebSocket.CONNECTING)) {
         console.log('[WS] Already connected or connecting');
@@ -138,6 +140,9 @@ function connectToSignalingServer(token) {
     signalingSocket.onopen = () => {
         console.log('[WS] Connected');
         isSocketConnected = true;
+
+        // Start sharing session
+        sendSignalingMessage(WS_TYPE.START_SHARING, null);
     };
 
     signalingSocket.onmessage = (event) => {
@@ -161,20 +166,43 @@ function connectToSignalingServer(token) {
     };
 }
 
+// Send Signaling Message
+function sendSignalingMessage(type, data) {
+    if (signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
+        const msg = {
+            type: type,
+            data: data
+        };
+        signalingSocket.send(JSON.stringify(msg));
+    }
+}
+
+// Handle Incoming Signaling Message
 function handleSignalingMessage(msg) {
     console.log('[WS] Received:', msg);
 
+    // msg.type dari Go itu integer
     switch (msg.type) {
+        case WS_TYPE.USER_SHARE_LIST:
+            console.log("Dapat User List:", msg.data);
+            
+            // Update device list in UI
+            if (typeof updateDeviceListFromBackend === 'function') {
+                updateDeviceListFromBackend(msg.data);
+            }
+            break;
+            
         case 2: // CONFIG_DISCOVERABLE
-            console.log('[WS] Discoverable status update:', msg.data);
-            // Verify success if needed
-            break;
-        case 4: // USER_SHARE_LIST
-            // TODO: Update device list logic
-            break;
+             console.log('[WS] Discoverable status updated');
+             break;
+             
         case 1: // ERROR
-            console.error('[WS] Server error:', msg.data);
-            break;
+             console.error('[WS] Server error:', msg.data);
+             // TODO: Tampilkan toast/alert error ke user (penting untuk IMK)
+             break;
+             
+        default:
+             console.log("Unhandled message type:", msg.type);
     }
 }
 
