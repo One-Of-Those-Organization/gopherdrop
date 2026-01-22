@@ -1,11 +1,7 @@
 // ==========================================
-// Global State & Configuration
+// Global State
 // ==========================================
-
-// Menyimpan daftar device yang diterima dari backend
-let currentDevices = []; 
-
-// Pagination config
+let currentDevices = [];
 const DEVICES_PER_PAGE = 6;
 let currentPage = 1;
 
@@ -13,404 +9,202 @@ let currentPage = 1;
 // Backend Integration Logic
 // ==========================================
 
-// Ambil data device dari backend dan update UI
 function updateDeviceListFromBackend(backendUsers) {
-    // Ambil public key sendiri untuk filter
+
+    if (!backendUsers || !Array.isArray(backendUsers)) {
+        console.warn('Invalid device list from backend', backendUsers);
+        return;
+    }
+
     const myPublicKey = localStorage.getItem('gdrop_public_key');
 
-    // Simpan state checked dari currentDevices sebelum update
+    // Simpan state checked biar gak ilang pas refresh polling
     const checkedIds = new Set(currentDevices.filter(d => d.checked).map(d => d.id));
 
-    // Mapping data dari backend ke format yang dibutuhkan UI
     currentDevices = backendUsers
         .filter(item => {
-            // Tidak menampilkan diri sendiri di list
-            return item.user.public_key !== myPublicKey;
+            // Filter diri sendiri
+            return item.user && item.user.public_key !== myPublicKey;
         })
         .map((item) => {
             const userId = item.user.public_key;
             return {
-                id: userId, // Public Key digunakan sebagai Unique ID
-                name: item.user.username,
-                icon: 'computer', // Default icon (bisa dikembangkan nanti)
-                status: 'Connected', // User di list ini pasti statusnya Online/Connected
-                // [RESTORE STATE] Jika ID ini ada di checkedIds, kembalikan status checked-nya
-                checked: checkedIds.has(userId)
+                id: userId,
+                name: item.user.username || 'Unknown Device',
+                icon: 'computer',
+                status: 'Connected',
+                checked: checkedIds.has(userId) // Restore checked state
             };
         });
 
-    // Reset ke halaman 1 jika halaman saat ini melebihi total halaman baru
+    // Handle Pagination Reset
     const totalPages = Math.ceil(currentDevices.length / DEVICES_PER_PAGE);
     if (currentPage > totalPages && totalPages > 0) {
         currentPage = 1;
+    } else if (currentPage === 0 && totalPages > 0) {
+        currentPage = 1;
     }
-    
-    // Render ulang daftar device dengan pagination
+
     renderDevicesWithPagination();
 }
 
 // ==========================================
-// Device Card UI Component
+// UI Rendering
 // ==========================================
 
 function createDeviceCard(device) {
-    // Styling status dot (Hijau jika connected)
-    const statusClass = device.status === 'Connected' ? 'bg-green-500' : 'bg-primary/40';
-    const statusText = device.status.toUpperCase();
-    
-    // Styling Checkbox & Border Card (Active state)
-    // Mengubah tampilan border jadi biru jika dicentang
-    const selectedClass = device.checked 
-        ? 'border-primary bg-primary/10' 
-        : '';
-        
-    const checkClass = device.checked 
-        ? 'bg-primary text-white border-primary' 
-        : 'bg-transparent border-2 border-slate-400 text-transparent';
+    const statusClass = 'bg-green-500'; // Selalu hijau karena yang dapet dari WS pasti online
+    const selectedClass = device.checked ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/50';
+    const checkClass = device.checked ? 'bg-primary text-white border-primary' : 'bg-transparent border-2 border-slate-300 text-transparent';
 
     return `
-        <div class="device-card p-3 lg:p-5 rounded-xl lg:rounded-2xl flex items-center gap-3 lg:gap-4 cursor-pointer border-2 ${selectedClass} transition-all" 
+        <div class="device-card bg-white p-4 rounded-2xl flex items-center gap-4 cursor-pointer border-2 ${selectedClass} transition-all shadow-sm hover:shadow-md" 
              onclick="toggleDeviceSelection('${device.id}')">
             
-            <div class="checkbox-indicator w-6 h-6 lg:w-7 lg:h-7 rounded-md ${checkClass} flex items-center justify-center flex-shrink-0 transition-all">
-                <span class="material-symbols-outlined text-sm lg:text-base">check</span>
+            <div class="w-6 h-6 rounded-lg ${checkClass} flex items-center justify-center flex-shrink-0 transition-all">
+                <span class="material-symbols-outlined text-sm">check</span>
             </div>
             
-            <div class="device-icon w-10 h-10 lg:w-12 lg:h-12 rounded-lg lg:rounded-xl flex items-center justify-center flex-shrink-0">
-                <span class="material-symbols-outlined text-xl lg:text-2xl">${device.icon}</span>
+            <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-500">
+                <span class="material-symbols-outlined text-2xl">${device.icon}</span>
             </div>
             
             <div class="flex-1 min-w-0">
-                <p class="font-bold truncate text-sm lg:text-base">${device.name}</p>
-                <div class="flex items-center gap-1.5 lg:gap-2">
-                    <span class="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full ${statusClass}"></span>
-                    <span class="text-[9px] lg:text-[11px] font-bold uppercase tracking-wider">${statusText}</span>
+                <p class="font-bold text-slate-800 truncate">${device.name}</p>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="w-2 h-2 rounded-full ${statusClass} animate-pulse"></span>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Online</span>
                 </div>
             </div>
-            
-            <button class="p-1 flex-shrink-0" onclick="event.stopPropagation(); showDeviceMenu('${device.id}')">
-                <span class="material-symbols-outlined text-lg lg:text-xl">more_vert</span>
-            </button>
         </div>
     `;
-}
-
-// ==========================================
-// Interaction Logic
-// ==========================================
-
-// Ubah status checked device saat diklik
-function toggleDeviceSelection(deviceId) {
-    // Cari device di array data yang asli
-    const device = currentDevices.find(d => d.id === deviceId);
-    
-    if (device) {
-        // Toggle nilai checked (true <-> false)
-        device.checked = !device.checked;
-        
-        // Render ulang untuk memperbarui tampilan CSS (border biru dsb)
-        renderDevicesWithPagination(); 
-    }
-}
-
-// ==========================================
-// Pagination System
-// ==========================================
-
-function getPaginatedDevices() {
-    const startIndex = (currentPage - 1) * DEVICES_PER_PAGE;
-    const endIndex = startIndex + DEVICES_PER_PAGE;
-    return currentDevices.slice(startIndex, endIndex);
-}
-
-function getTotalPages() {
-    return Math.ceil(currentDevices.length / DEVICES_PER_PAGE);
 }
 
 function renderDevicesWithPagination() {
     const container = document.getElementById('device-list');
     if (!container) return;
-    
-    const paginatedDevices = getPaginatedDevices();
-    
-    // Handling empty state
+
+    // Empty State
     if (currentDevices.length === 0) {
         container.innerHTML = `
-            <div class="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 opacity-60">
-                <span class="material-symbols-outlined text-4xl mb-2">radar</span>
-                <p>Scanning for devices...</p>
-                <p class="text-xs mt-1">No active users found nearby.</p>
+            <div class="col-span-full py-16 flex flex-col items-center justify-center text-center">
+                <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 relative">
+                    <span class="material-symbols-outlined text-4xl text-slate-300">radar</span>
+                    <div class="absolute inset-0 rounded-full border-2 border-slate-100 animate-ping"></div>
+                </div>
+                <h3 class="text-slate-900 font-bold text-lg">Scanning for devices...</h3>
+                <p class="text-slate-500 text-sm mt-1">Ensure other devices are on the same network.</p>
             </div>
         `;
-    } else {
-        container.innerHTML = paginatedDevices.map(device => createDeviceCard(device)).join('');
+        renderPagination(); // Clear pagination
+        const countEl = document.getElementById('device-count');
+        if(countEl) countEl.textContent = '0 FOUND';
+        return;
     }
-    
-    // Update counter text
+
+    const startIndex = (currentPage - 1) * DEVICES_PER_PAGE;
+    const paginatedDevices = currentDevices.slice(startIndex, startIndex + DEVICES_PER_PAGE);
+
+    container.innerHTML = paginatedDevices.map(device => createDeviceCard(device)).join('');
+
+    // Update Counter
     const countEl = document.getElementById('device-count');
-    if (countEl) {
-        countEl.textContent = `${currentDevices.length} FOUND`;
-    }
-    
+    if (countEl) countEl.textContent = `${currentDevices.length} FOUND`;
+
     renderPagination();
 }
 
 function renderPagination() {
     const container = document.getElementById('pagination');
     if (!container) return;
-    
-    const totalPages = getTotalPages();
-    
-    // Sembunyikan pagination jika cuma 1 halaman atau kosong
+
+    const totalPages = Math.ceil(currentDevices.length / DEVICES_PER_PAGE);
+
     if (totalPages <= 1) {
         container.innerHTML = '';
         return;
     }
-    
-    // Generate tombol Previous
-    let paginationHTML = `
-        <button class="pagination-btn w-8 h-8 lg:w-10 lg:h-10 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}" 
+
+    let html = `
+        <button class="w-10 h-10 rounded-lg flex items-center justify-center border border-slate-200 hover:bg-slate-50 disabled:opacity-50" 
                 onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
             <span class="material-symbols-outlined text-sm">chevron_left</span>
         </button>
-    `;
-    
-    // Generate nomor halaman
-    for (let i = 1; i <= totalPages; i++) {
-        const activeClass = i === currentPage ? 'active' : '';
-        paginationHTML += `
-            <button class="pagination-btn ${activeClass} w-8 h-8 lg:w-10 lg:h-10 text-xs lg:text-sm" 
-                    onclick="goToPage(${i})">${i}</button>
-        `;
-    }
-    
-    // Generate tombol Next
-    paginationHTML += `
-        <button class="pagination-btn w-8 h-8 lg:w-10 lg:h-10 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}" 
+        <span class="text-sm font-bold text-slate-500 px-2">Page ${currentPage} / ${totalPages}</span>
+        <button class="w-10 h-10 rounded-lg flex items-center justify-center border border-slate-200 hover:bg-slate-50 disabled:opacity-50" 
                 onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
             <span class="material-symbols-outlined text-sm">chevron_right</span>
         </button>
     `;
-    
-    container.innerHTML = paginationHTML;
+
+    container.innerHTML = html;
 }
 
 function goToPage(page) {
-    const totalPages = getTotalPages();
-    if (page < 1 || page > totalPages) return;
     currentPage = page;
     renderDevicesWithPagination();
 }
 
-// Legacy function support (Agar tidak error jika dipanggil function lama)
-function renderDevices(devices, containerId) {
-    renderDevicesWithPagination();
+function toggleDeviceSelection(deviceId) {
+    const device = currentDevices.find(d => d.id === deviceId);
+    if (device) {
+        device.checked = !device.checked;
+        renderDevicesWithPagination();
+    }
 }
-
-function showDeviceMenu(deviceId) {
-    console.log('Show menu for:', deviceId);
-}
-
-// ==========================================
-// Group & Modal Logic
-// ==========================================
 
 function getSelectedDevices() {
-    // Filter device yang property .checked === true
     return currentDevices.filter(d => d.checked);
 }
 
+// ==========================================
+// Modal & Group Logic (Legacy Support)
+// ==========================================
+
 function openCreateGroupModal() {
-    const selectedDevices = getSelectedDevices();
-    
-    if (selectedDevices.length === 0) {
-        showToast('Please select at least one device to create a group.', 'warning');
+    const selected = getSelectedDevices();
+    if (selected.length === 0) {
+        if(window.showToast) window.showToast('Select a device first!', 'warning');
         return;
     }
-    
-    renderSelectedDevicesInModal(selectedDevices);
-    
-    const modal = document.getElementById('create-group-modal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-        setTimeout(() => {
-            document.getElementById('new-group-name')?.focus();
-        }, 100);
+
+    const container = document.getElementById('selected-devices-list');
+    if(container) {
+        container.innerHTML = selected.map(d => `
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg mb-2">
+                <span class="font-bold text-sm text-slate-700">${d.name}</span>
+                <span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+            </div>
+        `).join('');
     }
+
+    const countEl = document.getElementById('selected-count-modal');
+    if(countEl) countEl.textContent = `(${selected.length})`;
+
+    document.getElementById('create-group-modal').classList.remove('hidden');
 }
 
 function closeCreateGroupModal() {
-    const modal = document.getElementById('create-group-modal');
-    if (modal) {
-        modal.classList.add('hidden');
-        document.body.style.overflow = '';
-        const input = document.getElementById('new-group-name');
-        if (input) input.value = '';
-    }
-}
-
-function renderSelectedDevicesInModal(devices) {
-    const container = document.getElementById('selected-devices-list');
-    const countEl = document.getElementById('selected-count-modal');
-    
-    if (countEl) countEl.textContent = `(${devices.length})`;
-    if (!container) return;
-    
-    container.innerHTML = devices.map(device => `
-        <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-            <div class="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500">
-                <span class="material-symbols-outlined text-lg">${device.icon}</span>
-            </div>
-            <div class="flex-1 min-w-0">
-                <p class="font-bold text-slate-900 text-sm truncate">${device.name}</p>
-                <p class="text-[10px] text-slate-500 uppercase">${device.status}</p>
-            </div>
-            <div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                <span class="material-symbols-outlined text-white text-sm">check</span>
-            </div>
-        </div>
-    `).join('');
+    document.getElementById('create-group-modal').classList.add('hidden');
 }
 
 function confirmCreateGroup() {
-    // 1. Validasi Input Nama Group
-    const nameInput = document.getElementById('new-group-name');
-    const groupName = nameInput?.value.trim();
-
-    if (!groupName) {
-        showToast('Please enter a group name', 'error');
-        nameInput?.focus();
-        nameInput?.classList.add('ring-2', 'ring-red-500');
-        setTimeout(() => nameInput?.classList.remove('ring-2', 'ring-red-500'), 2000);
+    // Logic Create Transaction disini nanti
+    const name = document.getElementById('new-group-name').value;
+    if(!name) {
+        if(window.showToast) window.showToast('Enter group name', 'error');
         return;
     }
 
-    // 2. Ambil Device yang dipilih
-    const selectedDevices = getSelectedDevices();
-    if (selectedDevices.length === 0) {
-        showToast('Please select at least one device!', 'warning');
-        return;
-    }
+    // Simpan ke Session Storage buat dikirim via WS app.js
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(getSelectedDevices()));
+    sessionStorage.setItem('gdrop_group_name', name);
 
-    // 3. Simpan data (Logic tetap sama)
-    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
-    sessionStorage.setItem('gdrop_group_name', groupName);
-
-    // 4. Cek File & Kirim
-    const storedFiles = JSON.parse(sessionStorage.getItem('gdrop_transfer_files') || '[]');
-
-    if (storedFiles.length > 0) {
-        if (window.startTransferProcess) {
-            window.startTransferProcess();
-            showToast(`Sending files to group "${groupName}"...`, 'success');
-            closeCreateGroupModal();
-        } else {
-            showToast('System Error: App Logic not ready', 'error');
-        }
-    } else {
-        // Kasus cuma bikin grup
-        showToast(`Group "${groupName}" created!`, 'success');
-
-        // Bersih-bersih UI
-        selectedDevices.forEach(d => d.checked = false);
-        renderDevicesWithPagination();
+    if(window.startTransferProcess) {
+        window.startTransferProcess(); // Panggil fungsi di app.js
         closeCreateGroupModal();
+        if(window.showToast) window.showToast('Group Created! Waiting for accept...', 'success');
     }
-}
-
-// ==========================================
-// File Selection & Upload Handlers
-// ==========================================
-
-let selectedFiles = [];
-
-function initFileUpload() {
-    const uploadZone = document.getElementById('upload-zone');
-    const selectFilesBtn = document.getElementById('select-files-btn');
-    
-    if (!uploadZone) return;
-    
-    // Create hidden file input element dynamically
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.id = 'file-input';
-    fileInput.multiple = true;
-    fileInput.style.display = 'none';
-    document.body.appendChild(fileInput);
-    
-    selectFilesBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        fileInput.click();
-    });
-    
-    // Logic: Kalau sudah ada file, klik upload zone buka modal review
-    // Kalau belum, buka file picker
-    uploadZone.addEventListener('click', () => {
-        if (selectedFiles.length > 0) {
-            // Note: Pastikan fungsi showFileSelectionModal ada di scope ini atau global
-            if(typeof showFileSelectionModal === 'function') showFileSelectionModal(); 
-        } else {
-            fileInput.click();
-        }
-    });
-    
-    fileInput.addEventListener('change', (e) => {
-        handleFileSelect(e.target.files);
-        fileInput.value = ''; // Reset value agar bisa pilih file yang sama lagi
-    });
-    
-    // Drag & Drop Visual Feedback
-    uploadZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadZone.classList.add('border-primary', 'bg-primary/5');
-    });
-    
-    uploadZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        uploadZone.classList.remove('border-primary', 'bg-primary/5');
-    });
-    
-    uploadZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadZone.classList.remove('border-primary', 'bg-primary/5');
-        handleFileSelect(e.dataTransfer.files);
-    });
-}
-
-function handleFileSelect(files) {
-    if (!files || files.length === 0) return;
-    
-    // Convert FileList to Array of metadata objects
-    // (Karena File object tidak bisa disimpan langsung ke sessionStorage)
-    const newFiles = Array.from(files).map(f => ({
-        name: f.name,
-        size: f.size,
-        type: f.type,
-        lastModified: f.lastModified
-    }));
-    
-    // Ambil file lama dari session (jika ada)
-    let currentFiles = [];
-    try {
-        const existing = sessionStorage.getItem('gdrop_transfer_files');
-        if (existing) currentFiles = JSON.parse(existing);
-    } catch(e) {}
-    
-    const updatedFiles = [...currentFiles, ...newFiles];
-    sessionStorage.setItem('gdrop_transfer_files', JSON.stringify(updatedFiles));
-    
-    // Simpan devices yang sedang DIPILIH (Checked)
-    const devices = getSelectedDevices();
-    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(devices));
-    
-    // Simpan SEMUA devices yang TERSEDIA (untuk modal 'Add Device' di halaman review)
-    sessionStorage.setItem('gdrop_available_devices', JSON.stringify(currentDevices));
-    
-    // Redirect ke halaman Review Transfer
-    const isPagesDir = window.location.pathname.includes('/pages/');
-    const reviewPageUrl = isPagesDir ? 'transfer-review.html' : 'pages/transfer-review.html';
-    window.location.href = reviewPageUrl;
 }
 
 // ==========================================
@@ -419,42 +213,38 @@ function handleFileSelect(files) {
 
 function showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
-
-    const MAX_TOASTS = 1; // Batas maksimal toast yang tampil bersamaan
-
-    const containerClasses = 'fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center';
+    const MAX_TOASTS = 1;
 
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
-        container.className = containerClasses;
+        container.className = 'fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center';
         document.body.appendChild(container);
-    } else {
-        container.className = containerClasses;
     }
 
-    // Hapus toast lama jika sudah melebihi batas
+    // Hapus toast lama jika kebanyakan
     while (container.childElementCount >= MAX_TOASTS) {
         container.firstChild.remove();
     }
 
     const toast = document.createElement('div');
 
+    // Config warna icon & border
     let icon = 'info';
-    let colorClass = 'border-l-4 border-blue-500 bg-white text-slate-800';
+    let colorClass = 'border-blue-500 bg-white text-slate-800'; // Default info
 
     if (type === 'success') {
         icon = 'check_circle';
-        colorClass = 'border-l-4 border-green-500 bg-white text-slate-800';
+        colorClass = 'border-green-500 bg-white text-slate-800';
     } else if (type === 'error') {
         icon = 'error';
-        colorClass = 'border-l-4 border-red-500 bg-white text-slate-800';
+        colorClass = 'border-red-500 bg-white text-slate-800';
     } else if (type === 'warning') {
         icon = 'warning';
-        colorClass = 'border-l-4 border-yellow-500 bg-white text-slate-800';
+        colorClass = 'border-yellow-500 bg-white text-slate-800';
     }
 
-    toast.className = `flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transform transition-all duration-500 -translate-y-full opacity-0 pointer-events-auto min-w-[300px] max-w-sm ${colorClass}`;
+    toast.className = `flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl border-l-4 transform transition-all duration-500 -translate-y-full opacity-0 pointer-events-auto min-w-[300px] max-w-sm ${colorClass}`;
 
     toast.innerHTML = `
         <span class="material-symbols-outlined text-2xl">${icon}</span>
@@ -462,44 +252,56 @@ function showToast(message, type = 'info') {
             <span class="font-bold text-xs uppercase tracking-wider opacity-70">${type}</span>
             <span class="font-bold text-sm">${message}</span>
         </div>
-        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-100 rounded-full">
+        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-full transition-colors">
             <span class="material-symbols-outlined text-lg">close</span>
         </button>
     `;
 
     container.appendChild(toast);
 
-    // Trigger Animasi Turun
-    setTimeout(() => {
+    // Animasi Masuk
+    requestAnimationFrame(() => {
         toast.classList.remove('-translate-y-full', 'opacity-0');
         toast.classList.add('translate-y-0', 'opacity-100');
-    }, 50);
+    });
 
-    // Auto Remove (Timer 4 detik)
+    // Auto Hapus
     setTimeout(() => {
         if (toast.parentElement) {
             toast.classList.remove('translate-y-0', 'opacity-100');
             toast.classList.add('-translate-y-full', 'opacity-0');
-            setTimeout(() => {
-                if (toast.parentElement) toast.remove();
-            }, 500);
+            setTimeout(() => toast.remove(), 500);
         }
     }, 4000);
 }
 
-// Expose to Global
+// ==========================================
+// Incoming Request UI Logic
+// ==========================================
+
+function showIncomingModal(senderName, fileName) {
+    const modal = document.getElementById('incoming-request-modal');
+    if (!modal) return;
+
+    document.getElementById('incoming-sender').textContent = senderName;
+    document.getElementById('incoming-file').textContent = fileName;
+
+    modal.classList.remove('hidden');
+    // Sound effect ping (optional)
+}
+
+function closeIncomingModal() {
+    const modal = document.getElementById('incoming-request-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// Expose globals
 window.showToast = showToast;
-
-// Export functions to Global Window Object
-// Agar bisa dipanggil oleh app.js atau inline HTML onclick=""
-window.handleFileSelect = handleFileSelect;
-window.updateDeviceListFromBackend = updateDeviceListFromBackend; // [IMPORTANT] Dipanggil WebSocket
-
-// Init on DOM Ready
-document.addEventListener('DOMContentLoaded', function() {
-    // Render awal (bisa jadi kosong sampai WebSocket connect)
-    if (document.getElementById('device-list')) {
-        renderDevicesWithPagination();
-    }
-    document.getElementById('create-group-btn')?.addEventListener('click', openCreateGroupModal);
-});
+window.showIncomingModal = showIncomingModal;
+window.closeIncomingModal = closeIncomingModal;
+window.toggleDeviceSelection = toggleDeviceSelection;
+window.goToPage = goToPage;
+window.updateDeviceListFromBackend = updateDeviceListFromBackend;
+window.openCreateGroupModal = openCreateGroupModal;
+window.closeCreateGroupModal = closeCreateGroupModal;
+window.confirmCreateGroup = confirmCreateGroup;
