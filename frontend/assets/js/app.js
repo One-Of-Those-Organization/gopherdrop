@@ -279,24 +279,29 @@ function handleTransactionCreated(data) {
         currentTransactionId = transactionId;
         console.log("Transaction Active (Sender):", currentTransactionId);
 
+        // --- STEP 1: KIRIM INFO FILE DULU (DIPINDAH KE ATAS) ---
+        // Gunakan fileQueue langsung karena datanya ada di memori
+        if (fileQueue.length > 0) {
+            const filesMeta = fileQueue.map(f => ({
+                name: f.name,
+                size: f.size,
+                type: f.type || 'application/octet-stream'
+            }));
+
+            console.log("[Sender] Sending file metadata first...");
+            sendSignalingMessage(WS_TYPE.FILE_SHARE_TARGET, {
+                transaction_id: currentTransactionId,
+                files: filesMeta
+            });
+        }
+
+        // --- STEP 2: BARU KIRIM INVITE ---
         const targetPublicKeys = targetDevices.map(d => d.id);
         sendSignalingMessage(WS_TYPE.USER_SHARE_TARGET, {
             transaction_id: currentTransactionId,
             public_keys: targetPublicKeys
         });
 
-        const selectedFiles = JSON.parse(sessionStorage.getItem('gdrop_transfer_files') || '[]');
-        if (selectedFiles.length > 0) {
-            const filesMeta = selectedFiles.map(f => ({
-                name: f.name,
-                size: f.size,
-                type: f.type || 'application/octet-stream'
-            }));
-            sendSignalingMessage(WS_TYPE.FILE_SHARE_TARGET, {
-                transaction_id: currentTransactionId,
-                files: filesMeta
-            });
-        }
     } else {
         if(!isInitialId && data.id !== currentTransactionId) {
             handleIncomingTransferOffer(data);
@@ -311,15 +316,19 @@ function handleIncomingTransferOffer(data) {
     console.log("[Receiver] Incoming Offer:", data);
 
     const senderName = data.sender || "Unknown Device";
-    const files = data.transaction.files || [];
-    const fileName = files.length > 0
-        ? `${files[0].name} ${files.length > 1 ? `(+${files.length-1} more)` : ''}`
-        : 'Unknown Files';
 
+    // 1. Ambil array files asli dari data transaksi
+    const files = data.transaction.files || [];
+
+    // 2. Cek apakah fungsi UI sudah siap
     if (window.showIncomingModal) {
-        window.showIncomingModal(senderName, fileName);
+        window.showIncomingModal(senderName, files);
     } else {
-        const accept = confirm(`Incoming from ${senderName}: ${fileName}. Accept?`);
+        const fileSummary = files.length > 0
+            ? `${files[0].name} ${files.length > 1 ? `(+${files.length-1} more)` : ''}`
+            : 'Unknown Files';
+
+        const accept = confirm(`Incoming from ${senderName}: ${fileSummary}. Accept?`);
         window.respondToInvitation(accept);
     }
 }

@@ -279,15 +279,55 @@ function showToast(message, type = 'info') {
 // Incoming Request UI Logic
 // ==========================================
 
-function showIncomingModal(senderName, fileName) {
+function showIncomingModal(senderName, files) {
     const modal = document.getElementById('incoming-request-modal');
     if (!modal) return;
 
+    // 1. Update Nama & Jumlah
     document.getElementById('incoming-sender').textContent = senderName;
-    document.getElementById('incoming-file').textContent = fileName;
+    const countEl = document.getElementById('incoming-file-count');
+    if(countEl) countEl.textContent = `${files.length} ITEMS`;
+
+    // 2. Render List File (Miro Style)
+    const listContainer = document.getElementById('incoming-file-list');
+    if (listContainer) {
+        if (!files || files.length === 0) {
+            listContainer.innerHTML = `<p class="text-slate-400 text-center py-4">No metadata available</p>`;
+        } else {
+            listContainer.innerHTML = files.map(file => `
+                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 hover:border-primary/30 transition-colors">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-xl bg-white dark:bg-slate-700 flex items-center justify-center text-primary shadow-sm">
+                            <span class="material-symbols-outlined text-xl">${getFileIcon(file.type || '')}</span>
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs font-bold text-slate-700 truncate pr-2">${file.name}</span>
+                            <span class="text-[9px] text-slate-400 font-black uppercase tracking-wider">${formatFileSize(file.size)}</span>
+                        </div>
+                    </div>
+                    <span class="material-symbols-outlined text-blue-400 text-sm">check_circle</span>
+                </div>
+            `).join('');
+        }
+    }
 
     modal.classList.remove('hidden');
-    // Sound effect ping (optional)
+}
+
+// Helper pendukung (Tambahkan di bawah jika belum ada)
+function formatFileSize(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getFileIcon(type) {
+    if (type.includes('image')) return 'image';
+    if (type.includes('pdf')) return 'picture_as_pdf';
+    if (type.includes('video')) return 'movie';
+    return 'description';
 }
 
 function closeIncomingModal() {
