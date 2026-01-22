@@ -11,7 +11,8 @@ const STORAGE_KEYS = {
 };
 
 // API Endpoints
-const API_BASE = 'http://localhost:8080/api/v1'; // Adjust to match your Go server port/address
+// const API_BASE = 'http://localhost:8080/api/v1'; // Adjust to match your Go server port/address
+const API_BASE = `http://${window.location.hostname}:8080/api/v1`; // DEBUG ONLY
 const ENDPOINTS = {
     REGISTER: `${API_BASE}/register`, // Generate new user/device
     CHALLENGE: `${API_BASE}/challenge`, // Provide challenge for signing
@@ -63,22 +64,30 @@ function clearCredentials() {
 // Creating initAuth Function
 // ==========================================
 export async function initAuth() {
-    let privateKey = getPrivateKey();
-    let deviceID = getDeviceName();
+    try {
+        // [DEBUG LOGIC] Cek apakah Browser HP memblokir Crypto
+        // Comment this block if not needed
+        if (!window.crypto || !window.crypto.subtle) {
+            alert("FATAL ERROR: Fitur Crypto diblokir Browser!\n\nSolusi: Buka chrome://flags, cari 'insecure origin', set Enabled untuk IP laptop ini.");
+            return null;
+        }
 
-    // Kalau belum ada kunci, generate dan registrasi
-    if (!privateKey || !deviceID) {
-        const generatedKeyPair = await generateKeyPair();
+        let privateKey = getPrivateKey();
+        let deviceID = getDeviceName();
 
-        await savePrivateKey(generatedKeyPair);
+        // Kalau belum ada kunci, generate dan registrasi
+        if (!privateKey || !deviceID) {
 
-        const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', generatedKeyPair.publicKey);
-        const publicKeyBase64 = bufferToBase64(publicKeyBuffer);
-        localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, publicKeyBase64);
+            const generatedKeyPair = await generateKeyPair();
 
-        await initDeviceID();
+            await savePrivateKey(generatedKeyPair);
 
-        try {
+            const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', generatedKeyPair.publicKey);
+            const publicKeyBase64 = bufferToBase64(publicKeyBuffer);
+            localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, publicKeyBase64);
+
+            await initDeviceID();
+
             const response = await fetch(ENDPOINTS.REGISTER, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -93,23 +102,19 @@ export async function initAuth() {
             // Attempt login after successful registration
             return await initAuth();
 
-        } catch (e) {
-            console.error('[Auth] Registration failed:', e);
-        }
-    } else {
-        const publicKey = getPublicKey();
-        const privateKey = getPrivateKey();
+        } else {
+            // Login Flow
+            const publicKey = getPublicKey();
+            const privateKeyVal = getPrivateKey();
 
-        if (!publicKey || !privateKey) {
-            return {
-                success: false,
-                error: 'No stored credentials'
-            };
-        }
+            if (!publicKey || !privateKeyVal) {
+                return { success: false, error: 'No stored credentials' };
+            }
 
-        try {
             // 1. Get Challenge from server
             const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
+            if (!challengeRes.ok) throw new Error('Gagal konek ke Laptop (Challenge)');
+            
             const challengeData = await challengeRes.json();
             const challengeBase64 = challengeData.data;
 
@@ -132,13 +137,15 @@ export async function initAuth() {
 
             if (loginRes.ok && loginData.token) {
                 localStorage.setItem('gdrop_token', loginData.token);
+                // alert("Info: Berhasil Login!"); // Uncomment untuk konfirmasi
                 return loginData.token;
             }
 
             return null;
-        } catch (error) {
-            console.error('[Auth] Auto-login failed:', error);
-            return { success: false, error: error.message };
         }
+    } catch (error) {
+        alert("System Error: " + error.message);
+        console.error('[Auth] Error:', error);
+        return { success: false, error: error.message };
     }
 };
