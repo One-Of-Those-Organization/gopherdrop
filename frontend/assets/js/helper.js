@@ -85,3 +85,26 @@ export async function initDeviceID() {
 
     return { deviceName, name: localStorage.getItem('gdrop_device_name') };
 }
+
+// ==========================================
+// UI/UX Helper Functions
+// ==========================================
+function getBasePath() {
+    const path = window.location.pathname;
+    if (path.includes('/pages/')) return '../';
+    return '';
+}
+
+export async function loadComponent(elementId, componentPath) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
+    try {
+        const basePath = getBasePath();
+        const fullPath = basePath + componentPath;
+        const response = await fetch(fullPath);
+        if (!response.ok) throw new Error(`Failed to load ${fullPath}`);
+        container.innerHTML = await response.text();
+    } catch (error) {
+        console.error('Error loading component:', error);
+    }
+}

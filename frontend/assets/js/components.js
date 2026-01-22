@@ -5,6 +5,7 @@
 // Menyimpan daftar device yang diterima dari backend
 let currentDevices = []; 
 
+// Pagination config
 const DEVICES_PER_PAGE = 6;
 let currentPage = 1;
 
@@ -223,7 +224,7 @@ function openCreateGroupModal() {
     const selectedDevices = getSelectedDevices();
     
     if (selectedDevices.length === 0) {
-        alert('Please select at least one device to create a group.');
+        showToast('Please select at least one device to create a group.', 'warning');
         return;
     }
     
@@ -273,30 +274,49 @@ function renderSelectedDevicesInModal(devices) {
 }
 
 function confirmCreateGroup() {
+    // 1. Validasi Input Nama Group
     const nameInput = document.getElementById('new-group-name');
     const groupName = nameInput?.value.trim();
-    
+
     if (!groupName) {
-        alert('Please enter a group name.');
+        showToast('Please enter a group name', 'error');
         nameInput?.focus();
+        nameInput?.classList.add('ring-2', 'ring-red-500');
+        setTimeout(() => nameInput?.classList.remove('ring-2', 'ring-red-500'), 2000);
         return;
     }
-    
+
+    // 2. Ambil Device yang dipilih
     const selectedDevices = getSelectedDevices();
-    
-    // NOTE FOR TEAM: Di sini nanti integrasi ke endpoint 'CREATE_GROUP' backend (belum ada)
-    console.log('Creating group:', {
-        name: groupName,
-        devices: selectedDevices.map(d => d.id)
-    });
-    
-    alert(`Group "${groupName}" created!`);
-    
-    // Uncheck selected devices after group created
-    selectedDevices.forEach(d => d.checked = false);
-    renderDevicesWithPagination();
-    
-    closeCreateGroupModal();
+    if (selectedDevices.length === 0) {
+        showToast('Please select at least one device!', 'warning');
+        return;
+    }
+
+    // 3. Simpan data (Logic tetap sama)
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
+    sessionStorage.setItem('gdrop_group_name', groupName);
+
+    // 4. Cek File & Kirim
+    const storedFiles = JSON.parse(sessionStorage.getItem('gdrop_transfer_files') || '[]');
+
+    if (storedFiles.length > 0) {
+        if (window.startTransferProcess) {
+            window.startTransferProcess();
+            showToast(`Sending files to group "${groupName}"...`, 'success');
+            closeCreateGroupModal();
+        } else {
+            showToast('System Error: App Logic not ready', 'error');
+        }
+    } else {
+        // Kasus cuma bikin grup
+        showToast(`Group "${groupName}" created!`, 'success');
+
+        // Bersih-bersih UI
+        selectedDevices.forEach(d => d.checked = false);
+        renderDevicesWithPagination();
+        closeCreateGroupModal();
+    }
 }
 
 // ==========================================
@@ -392,6 +412,83 @@ function handleFileSelect(files) {
     const reviewPageUrl = isPagesDir ? 'transfer-review.html' : 'pages/transfer-review.html';
     window.location.href = reviewPageUrl;
 }
+
+// ==========================================
+// Toast Notification
+// ==========================================
+
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+
+    const MAX_TOASTS = 1; // Batas maksimal toast yang tampil bersamaan
+
+    const containerClasses = 'fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center';
+
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = containerClasses;
+        document.body.appendChild(container);
+    } else {
+        container.className = containerClasses;
+    }
+
+    // Hapus toast lama jika sudah melebihi batas
+    while (container.childElementCount >= MAX_TOASTS) {
+        container.firstChild.remove();
+    }
+
+    const toast = document.createElement('div');
+
+    let icon = 'info';
+    let colorClass = 'border-l-4 border-blue-500 bg-white text-slate-800';
+
+    if (type === 'success') {
+        icon = 'check_circle';
+        colorClass = 'border-l-4 border-green-500 bg-white text-slate-800';
+    } else if (type === 'error') {
+        icon = 'error';
+        colorClass = 'border-l-4 border-red-500 bg-white text-slate-800';
+    } else if (type === 'warning') {
+        icon = 'warning';
+        colorClass = 'border-l-4 border-yellow-500 bg-white text-slate-800';
+    }
+
+    toast.className = `flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transform transition-all duration-500 -translate-y-full opacity-0 pointer-events-auto min-w-[300px] max-w-sm ${colorClass}`;
+
+    toast.innerHTML = `
+        <span class="material-symbols-outlined text-2xl">${icon}</span>
+        <div class="flex flex-col flex-1">
+            <span class="font-bold text-xs uppercase tracking-wider opacity-70">${type}</span>
+            <span class="font-bold text-sm">${message}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-100 rounded-full">
+            <span class="material-symbols-outlined text-lg">close</span>
+        </button>
+    `;
+
+    container.appendChild(toast);
+
+    // Trigger Animasi Turun
+    setTimeout(() => {
+        toast.classList.remove('-translate-y-full', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+    }, 50);
+
+    // Auto Remove (Timer 4 detik)
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.classList.remove('translate-y-0', 'opacity-100');
+            toast.classList.add('-translate-y-full', 'opacity-0');
+            setTimeout(() => {
+                if (toast.parentElement) toast.remove();
+            }, 500);
+        }
+    }, 4000);
+}
+
+// Expose to Global
+window.showToast = showToast;
 
 // Export functions to Global Window Object
 // Agar bisa dipanggil oleh app.js atau inline HTML onclick=""
