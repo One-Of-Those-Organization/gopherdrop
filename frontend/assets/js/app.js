@@ -672,6 +672,7 @@ function handleIncomingData(data) {
 }
 
 let receivedFileCount = 0; // State untuk tracking receiver
+let downloadedFiles = []; // Track downloaded files
 
 function saveReceivedFile(meta, buffers) {
     const blob = new Blob(buffers, { type: meta.mime || 'application/octet-stream' });
@@ -689,6 +690,10 @@ function saveReceivedFile(meta, buffers) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }, 1000);
+
+    // Track downloaded file
+    downloadedFiles.push(meta.name);
+    window.lastDownloadedFiles = downloadedFiles;
 
     showToast(`Received: ${meta.name}`, 'success');
 }
