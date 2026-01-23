@@ -48,8 +48,8 @@ func SetupRegister(s *Server, group fiber.Router) {
 		newUser := User{
 			Username:       b.Username,
 			PublicKey:      b.PublicKey,
-			IsDiscoverable: true,
 			CreatedAt:      time.Now(),
+			IsDiscoverable: true,
 		}
 
 		if err := s.DB.Create(&newUser).Error; err != nil {
@@ -155,6 +155,14 @@ func SetupStaticFrontEnd(s *Server) {
 	s.App.Static("/", "./frontend")
 }
 
+// SetupNetworkInfo provides endpoint for getting current network SSID
+func SetupNetworkInfo(group fiber.Router) {
+	group.Get("/network/ssid", func(c *fiber.Ctx) error {
+		netInfo := GetCurrentSSID()
+		return resp(c, cret(true, "network", netInfo), fiber.StatusOK)
+	})
+}
+
 func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 	group.Use("/ws", helper.WebSocketJWTGate)
 	group.Get("/ws", websocket.New(func(conn *websocket.Conn) {
@@ -233,12 +241,9 @@ func (s *Server) SetupAllEndPoint() {
 	// to get challenge for logging in
 	SetupChallange(s, api_pub)
 
-	// GET: /api/v1/network
-	// to get current network SSID
-	api_pub.Get("/network", func(c *fiber.Ctx) error {
-		ssid := helper.GetSSID()
-		return resp(c, cret(true, "network info", map[string]string{"ssid": ssid}), fiber.StatusOK)
-	})
+	// GET: /api/v1/network/ssid
+	// Get current network SSID (public endpoint)
+	SetupNetworkInfo(api_pub)
 
 	// POST: /api/v1/protected/user
 	// Update user profile (username)
