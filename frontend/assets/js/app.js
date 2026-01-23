@@ -196,6 +196,17 @@ function handleSignalingMessage(msg) {
                 // KASUS: Sender dapet notif Accepted
                 console.log("[Sender] User responded:", msg.data);
 
+                if (msg.data.accept === false) {
+                    const responderName = msg.data.sender || "Recipient";
+                    showToast(`${responderName} declined the transfer.`, 'error');
+
+                    // Opsional: Tutup overlay progress jika hanya kirim ke 1 orang
+                    // if(window.endTransferSession) window.endTransferSession();
+                    // IDK WHY NOT CATCH THIS CASE
+                    resetTransferState()
+                    return;
+                }
+
                 // Cek ID transaksi cocok & kita punya ID aktif
                 if (currentTransactionId && msg.data.transaction && msg.data.transaction.id === currentTransactionId) {
                     console.log("[Sender] Auto-starting transaction...");
@@ -345,6 +356,7 @@ window.respondToInvitation = function(isAccepted) {
 
     if (!isAccepted) {
         pendingTransactionId = null;
+        resetTransferState()
         showToast('Transfer declined', 'info');
     } else {
         showToast('Accepted! Preparing connection...', 'success');
@@ -612,6 +624,68 @@ window.handleFilesSelected = (files) => {
     const meta = fileQueue.map(f => ({ name: f.name, size: f.size, type: f.type }));
     sessionStorage.setItem('gdrop_transfer_files', JSON.stringify(meta));
 };
+
+// function resetTransferState() {
+//     console.log("[System] Resetting transfer state...");
+//
+//     // 1. Tutup koneksi WebRTC jika masih ada
+//     if (peerConnection) {
+//         peerConnection.close();
+//         peerConnection = null;
+//     }
+//     dataChannel = null;
+//
+//     // 2. Reset ID dan Target
+//     currentTransactionId = null;
+//     pendingTransactionId = null;
+//     targetPublicKey = null;
+//     currentFileIndex = 0;
+//
+//     // 3. Reset Buffer Penerima
+//     incomingFileInfo = null;
+//     incomingFileBuffer = [];
+//     incomingReceivedSize = 0;
+//
+//     // 4. Tutup UI Overlay jika terbuka
+//     const overlay = document.getElementById('transfer-progress-overlay');
+//     if (overlay) {
+//         overlay.classList.add('hidden');
+//         overlay.classList.remove('flex');
+//     }
+// }
+
+function resetTransferState() {
+    console.log("[System] Clearing all transfer states...");
+
+    // 1. Matikan WebRTC
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    dataChannel = null;
+
+    // 2. Reset Variabel ID & Antrian
+    currentTransactionId = null;
+    pendingTransactionId = null;
+    targetPublicKey = null;
+    currentFileIndex = 0;
+    fileQueue = [];
+
+    // 3. HAPUS SESSION STORAGE (Biar nggak nyangkut pas refresh)
+    sessionStorage.removeItem('gdrop_transfer_devices');
+    sessionStorage.removeItem('gdrop_transfer_files');
+    sessionStorage.removeItem('gdrop_group_name');
+
+    // 4. Tutup Overlay Progress
+    const overlay = document.getElementById('transfer-progress-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+    }
+}
+
+// Expose agar bisa dipanggil dari components.js
+window.resetTransferState = resetTransferState;
 
 // Run App
 document.addEventListener('DOMContentLoaded', initializeApp);

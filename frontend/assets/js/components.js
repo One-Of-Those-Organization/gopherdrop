@@ -294,10 +294,11 @@ function showIncomingModal(senderName, files) {
         if (!files || files.length === 0) {
             listContainer.innerHTML = `<p class="text-slate-400 text-center py-4">No metadata available</p>`;
         } else {
+            // Di dalam function showIncomingModal(senderName, files)
             listContainer.innerHTML = files.map(file => `
                 <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 hover:border-primary/30 transition-colors">
                     <div class="flex items-center gap-3 min-w-0">
-                        <div class="w-10 h-10 rounded-xl bg-white dark:bg-slate-700 flex items-center justify-center text-primary shadow-sm">
+                        <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-primary shadow-sm">
                             <span class="material-symbols-outlined text-xl">${getFileIcon(file.type || '')}</span>
                         </div>
                         <div class="flex flex-col min-w-0">
@@ -343,44 +344,49 @@ function showTransferProgressUI(files, deviceCount) {
     const overlay = document.getElementById('transfer-progress-overlay');
     if (!overlay) return;
 
+    // --- LOGIC RESET UNTUK TOP BAR (Biar gak dianggurin) ---
+    const overallText = document.getElementById('overall-percentage');
+    if(overallText) overallText.textContent = "0%";
+    const mainBar = document.getElementById('main-progress-bar');
+    if(mainBar) mainBar.style.width = "0%";
+    // -------------------------------------------------------
+
     // 1. Update Text Header
     document.getElementById('total-items-badge').textContent = `${files.length} files`;
     document.getElementById('recipient-count').textContent = `${deviceCount || 1} devices`;
 
-    // 2. Render Queue (Card Style cantik)
+    // 2. Render Queue (Card Style)
     const queueContainer = document.getElementById('transfer-queue');
     if (queueContainer) {
         queueContainer.innerHTML = files.map(file => {
-            // Icon berdasarkan tipe
             let icon = 'draft';
             let color = 'text-slate-400 bg-slate-50';
-            if (file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50'; }
-            else if (file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50'; }
+            if (file.type && file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50'; }
+            else if (file.type && file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50'; }
 
+            const safeID = file.name.replace(/[^a-zA-Z0-9]/g, '');
             return `
-            <div class="file-card-item bg-white p-4 rounded-2xl border border-slate-100 flex items-center gap-4">
+            <div class="file-card-item bg-white dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4">
                 <div class="w-12 h-12 rounded-xl ${color} flex items-center justify-center flex-shrink-0">
                     <span class="material-symbols-outlined text-2xl">${icon}</span>
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="flex justify-between mb-1">
-                        <p class="font-bold text-sm text-slate-800 truncate">${file.name}</p>
-                        <span class="text-[10px] font-bold text-slate-400" id="percent-${file.name.replace(/[^a-zA-Z0-9]/g, '')}">0%</span>
+                        <p class="font-bold text-sm text-slate-800 dark:text-slate-200 truncate pr-2">${file.name}</p>
+                        <span class="text-[10px] font-bold text-slate-400" id="percent-${safeID}">0%</span>
                     </div>
-                    <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div id="bar-${file.name.replace(/[^a-zA-Z0-9]/g, '')}" class="h-full bg-primary rounded-full transition-all duration-300" style="width: 0%"></div>
+                    <div class="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div id="bar-${safeID}" class="h-full bg-primary rounded-full transition-all duration-300" style="width: 0%"></div>
                     </div>
-                    <p class="text-[10px] text-slate-400 font-medium mt-1 uppercase tracking-wider" id="status-${file.name.replace(/[^a-zA-Z0-9]/g, '')}">Queued</p>
+                    <p class="text-[10px] text-slate-400 font-medium mt-1 uppercase tracking-wider" id="status-${safeID}">Queued</p>
                 </div>
-            </div>
-            `;
+            </div>`;
         }).join('');
     }
 
-    // 3. Render Mesh Network (Jaring-Jaring)
+    // 3. Render Mesh
     renderMeshNetwork(deviceCount || 1);
 
-    // Show Overlay
     overlay.classList.remove('hidden');
     overlay.classList.add('flex');
 }
@@ -432,37 +438,92 @@ function renderMeshNetwork(count) {
 window.updateFileProgressUI = function(fileName, percentage) {
     const safeName = fileName.replace(/[^a-zA-Z0-9]/g, '');
 
-    // Update Text Status
+    // 1. Update Card File Satuan (Bagian Bawah)
     const statusEl = document.getElementById(`status-${safeName}`);
     const percentEl = document.getElementById(`percent-${safeName}`);
     const barEl = document.getElementById(`bar-${safeName}`);
 
     if (statusEl) {
-        if(percentage >= 100) {
+        if (percentage >= 100) {
             statusEl.textContent = "COMPLETED";
             statusEl.className = "text-[10px] font-bold text-green-500 mt-1 uppercase tracking-wider";
         } else {
             statusEl.textContent = "SENDING...";
+            // Tambahkan animasi pulse biar keren pas ngirim
+            statusEl.className = "text-[10px] text-primary font-bold mt-1 uppercase tracking-wider animate-pulse";
         }
     }
-    if (percentEl) percentEl.textContent = `${percentage}%`;
+    if (percentEl) percentEl.textContent = `${Math.round(percentage)}%`;
     if (barEl) barEl.style.width = `${percentage}%`;
 
-    // Update Main Bar
+    // 2. UPDATE TOP BAR (Agar Gak Dianggurin)
+    // Ambil semua persentase file yang ada di layar, lalu hitung rata-ratanya
+    const allPercentEls = document.querySelectorAll('[id^="percent-"]');
+    let total = 0;
+    allPercentEls.forEach(el => {
+        total += parseInt(el.textContent) || 0;
+    });
+
+    const averageProgress = Math.round(total / (allPercentEls.length || 1));
+
+    // Update Progress Bar Besar di Atas (Miro Gambar 4)
     const mainBar = document.getElementById('main-progress-bar');
     const overallText = document.getElementById('overall-percentage');
-    if(mainBar) mainBar.style.width = `${percentage}%`; // Simplifikasi: pake progress file terakhir dulu
-    if(overallText) overallText.textContent = `${percentage}%`;
+
+    if (mainBar) mainBar.style.width = `${averageProgress}%`;
+    if (overallText) overallText.textContent = `${averageProgress}%`;
+
+    // 3. TRIGGER SELESAI (Hanya jika rata-rata sudah 100%)
+    if (averageProgress >= 100) {
+        setTimeout(() => {
+            showTransferCompleteUI(); // Panggil layar centang hijau (Miro Gambar 5)
+        }, 800);
+    }
 };
 
+function showTransferCompleteUI() {
+    const mainContent = document.querySelector('#transfer-progress-overlay main');
+    if (!mainContent) return;
+
+    // Ganti isi overlay dengan tampilan Centang Hijau (Miro Style)
+    mainContent.innerHTML = `
+        <div class="flex-1 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
+            <div class="w-32 h-32 bg-green-500 text-white rounded-full flex items-center justify-center shadow-2xl shadow-green-500/40 mb-8">
+                <span class="material-symbols-outlined text-6xl">check</span>
+            </div>
+            <h1 class="text-5xl font-bold text-slate-900 mb-4">Transfer Complete!</h1>
+            <p class="text-slate-500 text-lg max-w-md">Successfully delivered all files to the recipients in the group.</p>
+            
+            <div class="mt-12 flex gap-4">
+                <button onclick="endTransferSession()" class="px-8 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:brightness-110 transition-all">
+                    Return Home
+                </button>
+                <button onclick="window.location.reload()" class="px-8 py-4 border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-all">
+                    Share Again
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// function endTransferSession() {
+//     const overlay = document.getElementById('transfer-progress-overlay');
+//     if (overlay) {
+//         overlay.classList.add('hidden');
+//         overlay.classList.remove('flex');
+//     }
+//     // Refresh page untuk reset koneksi (bersih-bersih)
+//     window.location.reload();
+// }
+
 function endTransferSession() {
-    const overlay = document.getElementById('transfer-progress-overlay');
-    if (overlay) {
-        overlay.classList.add('hidden');
-        overlay.classList.remove('flex');
+    // Panggil fungsi reset di app.js daripada reload halaman
+    if (window.resetTransferState) {
+        window.resetTransferState();
+        if(window.showToast) window.showToast('Transfer session ended', 'info');
+    } else {
+        window.location.reload(); // Fallback jika fungsi reset belum ke-load
     }
-    // Refresh page untuk reset koneksi (bersih-bersih)
-    window.location.reload();
 }
 
 // ==========================================
