@@ -11,24 +11,24 @@ import (
 type WSType int
 
 const (
-	NONE                WSType = iota	// 0
-	ERROR								// 1
+	NONE  WSType = iota // 0
+	ERROR               // 1
 
-	CONFIG_DISCOVERABLE					// 2
+	CONFIG_DISCOVERABLE // 2
 
-	START_SHARING						// 3
-	USER_SHARE_LIST						// 4
+	START_SHARING   // 3
+	USER_SHARE_LIST // 4
 
-	NEW_TRANSACTION						// 5
-	INFO_TRANSACTION                    // 6
-	DELETE_TRANSACTION					// 7
+	NEW_TRANSACTION    // 5
+	INFO_TRANSACTION   // 6
+	DELETE_TRANSACTION // 7
 
-	USER_SHARE_TARGET					// 8
-	FILE_SHARE_TARGET					// 9
+	USER_SHARE_TARGET // 8
+	FILE_SHARE_TARGET // 9
 
-	START_TRANSACTION					// 10
-	TRANSACTION_SHARE_ACCEPT            // 11
-	WEBRTC_SIGNAL                       // 12
+	START_TRANSACTION        // 10
+	TRANSACTION_SHARE_ACCEPT // 11
+	WEBRTC_SIGNAL            // 12
 )
 
 type WSMessage struct {
@@ -251,7 +251,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 		case TRANSACTION_SHARE_ACCEPT:
 			var data struct {
 				TransactionID string `mapstructure:"transaction_id"`
-				Accept        bool   `mapstructure:"files"`
+				Accept        bool   `mapstructure:"accept"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
 				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_ACCEPT")
@@ -259,10 +259,10 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			}
 
 			s.TransactionMu.Lock()
-			defer s.TransactionMu.Unlock()
 
 			tx, ok := s.Transactions[data.TransactionID]
 			if !ok {
+				s.TransactionMu.Unlock()
 				sendWS(mUser.Conn, ERROR, "transaction not found")
 				continue
 			}
@@ -279,6 +279,36 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			}
 
 			sendWS(mUser.Conn, TRANSACTION_SHARE_ACCEPT, "response recorded")
+
+			// Notify sender about the response (both accept and decline)
+			if data.Accept {
+				// Notify sender about acceptance
+				sendWS(tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
+					Type          string `json:"type"`
+					Username      string `json:"username"`
+					Accepted      bool   `json:"accepted"`
+					TransactionID string `json:"transaction_id"`
+				}{
+					Type:          "accept_notification",
+					Username:      mUser.MinUser.Username,
+					Accepted:      true,
+					TransactionID: data.TransactionID,
+				})
+			} else {
+				// Notify sender about decline
+				sendWS(tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
+					Type          string `json:"type"`
+					Username      string `json:"username"`
+					Declined      bool   `json:"declined"`
+					TransactionID string `json:"transaction_id"`
+				}{
+					Type:          "decline_notification",
+					Username:      mUser.MinUser.Username,
+					Declined:      true,
+					TransactionID: data.TransactionID,
+				})
+			}
+			s.TransactionMu.Unlock()
 			continue
 
 		case START_TRANSACTION:
@@ -290,15 +320,16 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				continue
 			}
 			s.TransactionMu.Lock()
-			defer s.TransactionMu.Unlock()
 
 			tx, ok := s.Transactions[data.TransactionID]
 			if !ok {
+				s.TransactionMu.Unlock()
 				sendWS(mUser.Conn, ERROR, "transaction not found")
 				continue
 			}
 
 			if tx.Sender != mUser {
+				s.TransactionMu.Unlock()
 				sendWS(mUser.Conn, ERROR, "not authorized to start this transaction")
 				continue
 			}
@@ -326,6 +357,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				sendWS(target.User.Conn, START_TRANSACTION, payload)
 			}
 			sendWS(mUser.Conn, START_TRANSACTION, "transaction started")
+			s.TransactionMu.Unlock()
 			continue
 		case WEBRTC_SIGNAL:
 			var signal WebRTCSignal

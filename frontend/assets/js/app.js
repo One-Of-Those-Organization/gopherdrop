@@ -224,26 +224,48 @@ function handleSignalingMessage(msg) {
                 }
                 handleIncomingTransferOffer(msg.data);
             } else {
-                // KASUS: Sender dapet notif Accepted
+                // KASUS: Sender dapet notif Accepted atau Declined
                 console.log("[Sender] User responded:", msg.data);
 
-                if (msg.data.accept === false) {
-                    const responderName = msg.data.sender || "Recipient";
-                    showToast(`${responderName} declined the transfer.`, 'error');
-
-                    // Opsional: Tutup overlay progress jika hanya kirim ke 1 orang
-                    // if(window.endTransferSession) window.endTransferSession();
-                    // IDK WHY NOT CATCH THIS CASE
-                    resetTransferState()
+                // Handle new decline_notification format from backend
+                if (msg.data && msg.data.type === 'decline_notification' && msg.data.declined) {
+                    const responderName = msg.data.username || "Recipient";
+                    showToast(`${responderName} declined your invitation.`, 'error');
+                    resetTransferState();
                     return;
                 }
 
-                // Cek ID transaksi cocok & kita punya ID aktif
-                if (currentTransactionId && msg.data.transaction && msg.data.transaction.id === currentTransactionId) {
-                    console.log("[Sender] Auto-starting transaction...");
+                // Handle accept_notification format from backend
+                if (msg.data && msg.data.type === 'accept_notification' && msg.data.accepted) {
+                    const responderName = msg.data.username || "Recipient";
+                    showToast(`${responderName} accepted! Starting transfer...`, 'success');
+                    
+                    // Auto-start transaction
+                    if (currentTransactionId) {
+                        console.log("[Sender] Auto-starting transaction after acceptance...");
+                        
+                        // Simpan Public Key Penerima (ambil dari session storage)
+                        const devices = JSON.parse(sessionStorage.getItem('gdrop_transfer_devices') || '[]');
+                        if (devices.length > 0) targetPublicKey = devices[0].id;
+                        
+                        sendSignalingMessage(WS_TYPE.START_TRANSACTION, {
+                            transaction_id: currentTransactionId
+                        });
+                    }
+                    return;
+                }
 
-                    // Simpan Public Key Penerima (ambil dari session storage)
-                    // PENTING: Biar Sender tau mau kirim sinyal WebRTC ke siapa
+                // Legacy decline format
+                if (msg.data.accept === false) {
+                    const responderName = msg.data.sender || "Recipient";
+                    showToast(`${responderName} declined the transfer.`, 'error');
+                    resetTransferState();
+                    return;
+                }
+
+                // Legacy: Cek ID transaksi cocok & kita punya ID aktif (fallback)
+                if (currentTransactionId && msg.data.transaction && msg.data.transaction.id === currentTransactionId) {
+                    console.log("[Sender] Auto-starting transaction (legacy)...");
                     const devices = JSON.parse(sessionStorage.getItem('gdrop_transfer_devices') || '[]');
                     if(devices.length > 0) targetPublicKey = devices[0].id;
 
@@ -258,18 +280,36 @@ function handleSignalingMessage(msg) {
             console.log("START TRANSACTION RECEIVED!", msg.data);
             showToast('Initializing Connection...', 'success');
 
-            // Cek apakah kita Sender?
-            const files = JSON.parse(sessionStorage.getItem('gdrop_transfer_files') || '[]');
-            const isInitiator = (files.length > 0);
+            // DETEKSI LOGIKA SENDER VS RECEIVER (CRITICAL FIX)
+            // Cek Transaction ID dari paket.
+            // - Jika ID sama dengan currentTransactionId (yang kita buat), maka kita Sender.
+            // - Jika ID beda atau kita tidak punya ID, maka kita Receiver.
+            
+            let isInitiator = false;
+            
+            if (msg.data && msg.data.transaction_id) {
+                if (currentTransactionId && msg.data.transaction_id === currentTransactionId) {
+                    isInitiator = true;
+                } else {
+                    isInitiator = false;
+                }
+            } else {
+                 // Fallback Legacy (Jika tidak ada ID di paket)
+                 const myPubKey = localStorage.getItem('gdrop_public_key');
+                 const msgSender = msg.data.sender_public_key || msg.data.sender_id;
+                 if (msgSender && myPubKey) isInitiator = (msgSender === myPubKey);
+                 else isInitiator = (fileQueue.length > 0);
+            }
 
             // Siapkan antrian file & UI
             let displayFiles = [];
 
             if (isInitiator) {
-                fileQueue = files; // Load antrian file
+                // fileQueue sudah berisi File objects dari handleFilesSelected
+                // JANGAN overwrite dengan metadata dari sessionStorage!
+                displayFiles = fileQueue.map(f => ({ name: f.name, size: f.size, type: f.type }));
             } else {
                 // Ambil dari data WebSocket (Backend sudah kirim list file)
-                // msg.data.files isinya array file dari server
                 if (msg.data && msg.data.files) {
                     displayFiles = msg.data.files;
                 } else {
@@ -279,7 +319,8 @@ function handleSignalingMessage(msg) {
 
             // Tampilkan Overlay Progress
             if(window.showTransferProgressUI) {
-                window.showTransferProgressUI(displayFiles, 1);
+                // Parameter ke-3: isReceiver (!isInitiator)
+                window.showTransferProgressUI(displayFiles, 1, !isInitiator);
             }
 
             // MULAI WebRTC Handshake
@@ -461,6 +502,9 @@ async function handleWebRTCSignal(signal) {
 
     if (data.type === 'offer') {
         // RECEIVER: Terima Offer -> Bikin Answer
+        // PENTING: Set targetPublicKey agar ICE candidates bisa dikirim ke sender
+        targetPublicKey = signal.from_key;
+        
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
@@ -508,7 +552,11 @@ function setupDataChannel(channel) {
 function sendCurrentFile() {
     if (currentFileIndex >= fileQueue.length) {
         console.log("All files sent.");
-        document.getElementById('transfer-status-text').textContent = "ALL COMPLETED";
+        const statusEl = document.getElementById('transfer-status-text');
+        if (statusEl) statusEl.textContent = "ALL COMPLETED";
+        
+        // Show completion UI
+        if (window.showTransferCompleteUI) window.showTransferCompleteUI();
         return;
     }
 
@@ -594,10 +642,32 @@ function handleIncomingData(data) {
         // Cek Selesai
         if (incomingReceivedSize >= incomingFileInfo.size) {
             saveReceivedFile(incomingFileInfo, incomingFileBuffer);
-            incomingFileInfo = null; // Reset
+            incomingFileInfo = null; // Reset metadata untuk file berikutnya
+            
+            // Cek apakah semua file dalam batch sudah diterima?
+            // Kita bisa cek fileQueue di sisi receiver (diisi saat START_TRANSACTION)
+            // ATAU cukup cek apakah ini file terakhir di queue?
+            
+            // Logika Sederhana:
+            // Increment index file yang diterima
+            if (typeof receivedFileCount === 'undefined') receivedFileCount = 0;
+            receivedFileCount++;
+            
+            // Update UI status text
+            const statusEl = document.getElementById('transfer-status-text');
+            if(statusEl) statusEl.textContent = `Received ${receivedFileCount} files`;
+
+             // Jika kita punya info total file dari START_TRANSACTION, kita bisa show complete UI
+            if (fileQueue.length > 0 && receivedFileCount >= fileQueue.length) {
+                console.log("[Receiver] All files received.");
+                 if (statusEl) statusEl.textContent = "ALL RECEIVED";
+                if(window.showTransferCompleteUI) setTimeout(() => window.showTransferCompleteUI(), 1000);
+            }
         }
     }
 }
+
+let receivedFileCount = 0; // State untuk tracking receiver
 
 function saveReceivedFile(meta, buffers) {
     const blob = new Blob(buffers, { type: meta.mime || 'application/octet-stream' });
