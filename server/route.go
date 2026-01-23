@@ -2,13 +2,14 @@ package server
 
 import (
 	"fmt"
+	"gopherdrop/helper"
+	"log"
+	"time"
+
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"gopherdrop/helper"
-	"log"
-	"time"
 )
 
 var Counter int = 0
@@ -125,34 +126,41 @@ func SetupLogin(s *Server, group fiber.Router) {
 }
 
 func SetupUpdateProfile(s *Server, group fiber.Router) {
-    group.Post("/user", func(c *fiber.Ctx) error {
-        userToken := c.Locals("user").(*jwt.Token)
-        claims := userToken.Claims.(jwt.MapClaims)
-        pubKey := claims["public_key"].(string)
+	group.Post("/user", func(c *fiber.Ctx) error {
+		userToken := c.Locals("user").(*jwt.Token)
+		claims := userToken.Claims.(jwt.MapClaims)
+		pubKey := claims["public_key"].(string)
 
-        var b struct {
-            Username string `json:"username"`
-        }
+		var b struct {
+			Username string `json:"username"`
+		}
 
-        if err := c.BodyParser(&b); err != nil {
-            return resp(c, cret(false, "Invalid body", nil), fiber.StatusBadRequest)
-        }
+		if err := c.BodyParser(&b); err != nil {
+			return resp(c, cret(false, "Invalid body", nil), fiber.StatusBadRequest)
+		}
 
-        if b.Username == "" {
-             return resp(c, cret(false, "Username is required", nil), fiber.StatusBadRequest)
-        }
+		if b.Username == "" {
+			return resp(c, cret(false, "Username is required", nil), fiber.StatusBadRequest)
+		}
 
+		if err := s.DB.Model(&User{}).Where("public_key = ?", pubKey).Update("username", b.Username).Error; err != nil {
+			return resp(c, cret(false, "Failed to update profile", nil), fiber.StatusInternalServerError)
+		}
 
-        if err := s.DB.Model(&User{}).Where("public_key = ?", pubKey).Update("username", b.Username).Error; err != nil {
-             return resp(c, cret(false, "Failed to update profile", nil), fiber.StatusInternalServerError)
-        }
-        
-        return resp(c, cret(true, "Profile updated", nil), fiber.StatusOK)
-    })
+		return resp(c, cret(true, "Profile updated", nil), fiber.StatusOK)
+	})
 }
 
 func SetupStaticFrontEnd(s *Server) {
 	s.App.Static("/", "./frontend")
+}
+
+// SetupNetworkInfo provides endpoint for getting current network SSID
+func SetupNetworkInfo(group fiber.Router) {
+	group.Get("/network/ssid", func(c *fiber.Ctx) error {
+		netInfo := GetCurrentSSID()
+		return resp(c, cret(true, "network", netInfo), fiber.StatusOK)
+	})
 }
 
 func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
@@ -182,7 +190,7 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 			Conn:      conn,
 			JWTExpiry: expTime,
 		}
-        s.MUser[conn] = muser
+		s.MUser[conn] = muser
 
 		if len(s.CachedUser) <= 0 {
 			CacheDiscoverableUser(s)
@@ -233,9 +241,13 @@ func (s *Server) SetupAllEndPoint() {
 	// to get challenge for logging in
 	SetupChallange(s, api_pub)
 
-    // POST: /api/v1/protected/user
-    // Update user profile (username)
-    SetupUpdateProfile(s, protected)
+	// GET: /api/v1/network/ssid
+	// Get current network SSID (public endpoint)
+	SetupNetworkInfo(api_pub)
+
+	// POST: /api/v1/protected/user
+	// Update user profile (username)
+	SetupUpdateProfile(s, protected)
 
 	// GET: /api/v1/protected/ws
 	// to upgrade the connection to websocket for later

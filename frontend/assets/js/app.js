@@ -81,12 +81,43 @@ async function initializeApp() {
     if (typeof initFileUpload === 'function') initFileUpload();
     highlightActiveNav();
     startNetworkSpeedIndicator();
+    fetchNetworkSSID(); // Fetch and display current network SSID
 
     // 4. Init Empty State
     if (typeof renderDevices === 'function' && document.getElementById('device-list')) {
         renderDevices([], 'device-list');
     }
 }
+
+// Fetch current network SSID from backend API
+async function fetchNetworkSSID() {
+    try {
+        const response = await fetch('/api/v1/network/ssid');
+        if (!response.ok) throw new Error('Failed to fetch SSID');
+        
+        const result = await response.json();
+        if (result.success && result.data) {
+            const ssid = result.data.ssid || 'Unknown Network';
+            
+            // Update desktop element
+            const desktopEl = document.getElementById('network-ssid-desktop');
+            if (desktopEl) desktopEl.textContent = ssid;
+            
+            // Update mobile element
+            const mobileEl = document.getElementById('network-ssid-mobile');
+            if (mobileEl) mobileEl.textContent = ssid;
+        }
+    } catch (error) {
+        console.error('[Network] Failed to fetch SSID:', error);
+        // Set fallback text
+        const desktopEl = document.getElementById('network-ssid-desktop');
+        if (desktopEl) desktopEl.textContent = 'Local Network';
+        
+        const mobileEl = document.getElementById('network-ssid-mobile');
+        if (mobileEl) mobileEl.textContent = 'Local Network';
+    }
+}
+
 
 function highlightActiveNav() {
     const currentPath = window.location.pathname;
