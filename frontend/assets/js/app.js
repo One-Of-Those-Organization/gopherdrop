@@ -315,6 +315,13 @@ function handleSignalingMessage(msg) {
                 } else {
                     displayFiles = [{name: "Unknown File", size: 0}];
                 }
+                
+                // Simpan sender device name untuk receiver
+                if (msg.data && msg.data.sender_name) {
+                    window.senderDeviceName = msg.data.sender_name;
+                } else if (msg.data && msg.data.sender) {
+                    window.senderDeviceName = msg.data.sender;
+                }
             }
 
             // Tampilkan Overlay Progress
@@ -462,12 +469,9 @@ async function startWebRTCConnection(isInitiator) {
         if(peerConnection.connectionState === 'connected') {
             showToast('P2P Connected!', 'success');
 
-            // Tampilkan UI Progress Overlay
-            if(window.showTransferProgressUI) {
-                // Ambil info file dari queue atau session
-                const files = fileQueue.length > 0 ? fileQueue : JSON.parse(sessionStorage.getItem('gdrop_transfer_files') || '[]');
-                window.showTransferProgressUI(files, 1);
-            }
+            // UI Progress sudah ditampilkan saat START_TRANSACTION
+            // Tidak perlu memanggil showTransferProgressUI lagi di sini
+            // untuk menghindari override parameter isReceiver
         }
     };
 
