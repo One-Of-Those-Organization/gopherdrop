@@ -1222,3 +1222,17 @@ function proceedDirectTransfer(selectedDevices) {
 }
 
 window.showTransferCompleteUI = showTransferCompleteUI;
+
+// Helper Global: Cek apakah ID device tertentu sedang Online
+window.isDeviceOnline = function(deviceId) {
+    // currentDevices adalah list yang didapat dari WebSocket (Realtime)
+    if (typeof currentDevices === 'undefined') return false;
+    return currentDevices.some(d => d.id === deviceId);
+};
+
+// Helper Global: Ambil semua device online yang BELUM ada di list tertentu (untuk fitur Add Device)
+window.getOnlineDevicesNotInList = function(existingDeviceIds) {
+    if (typeof currentDevices === 'undefined') return [];
+    const existingSet = new Set(existingDeviceIds);
+    return currentDevices.filter(d => !existingSet.has(d.id));
+};
