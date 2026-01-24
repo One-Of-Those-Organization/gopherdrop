@@ -340,9 +340,66 @@ function closeIncomingModal() {
 // Transfer Progress UI Logic
 // ==========================================
 
-function showTransferProgressUI(files, deviceCount) {
-    const overlay = document.getElementById('transfer-progress-overlay');
-    if (!overlay) return;
+// ==========================================
+// Transfer Progress UI Logic (Dynamic Loading)
+// ==========================================
+
+async function loadTransferProgressView() {
+    let overlay = document.getElementById('transfer-progress-overlay');
+    if (overlay) return overlay;
+
+    try {
+        console.log("[UI] Loading transfer progress view...");
+        const response = await fetch('pages/transfer-progress.html');
+        if (!response.ok) throw new Error("Failed to load transfer page");
+        
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Extract content from body
+        const nav = doc.querySelector('nav');
+        const main = doc.querySelector('main');
+        
+        if (!nav || !main) throw new Error("Invalid page structure");
+
+        // Create overlay container
+        overlay = document.createElement('div');
+        overlay.id = 'transfer-progress-overlay';
+        overlay.className = 'fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-900 flex flex-col transition-all duration-300 font-sans';
+        
+        // Inject content
+        overlay.appendChild(nav.cloneNode(true));
+        overlay.appendChild(main.cloneNode(true));
+        
+        document.body.appendChild(overlay);
+        
+        // Alias cancelTransfer for compatibility
+        window.cancelTransfer = window.endTransferSession;
+        
+        return overlay;
+    } catch (e) {
+        console.error("[UI] Error loading transfer view:", e);
+        return null;
+    }
+}
+
+async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
+    // Save state for completion screen
+    window.lastTransferFiles = files;
+    window.transferStartTime = Date.now();
+    window.transferRecipientCount = deviceCount;
+    window.isReceiverMode = isReceiver; // Save for completion screen
+
+    // 1. Ensure view is loaded
+    let overlay = document.getElementById('transfer-progress-overlay');
+    if (!overlay) {
+        overlay = await loadTransferProgressView();
+        if (!overlay) {
+            alert("Failed to load transfer UI");
+            return;
+        }
+    }
 
     // --- LOGIC RESET UNTUK TOP BAR (Biar gak dianggurin) ---
     const overallText = document.getElementById('overall-percentage');
@@ -351,11 +408,38 @@ function showTransferProgressUI(files, deviceCount) {
     if(mainBar) mainBar.style.width = "0%";
     // -------------------------------------------------------
 
-    // 1. Update Text Header
-    document.getElementById('total-items-badge').textContent = `${files.length} files`;
-    document.getElementById('recipient-count').textContent = `${deviceCount || 1} devices`;
+    // 2. Update Text Header & Save Device Name
+    const peerName = (!isReceiver && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))) 
+        ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')) 
+        : (isReceiver ? (window.senderDeviceName || "Sender") : "Device"); // Use sender name for receiver
+    
+    window.peerDeviceName = peerName; // Save for completion screen
 
-    // 2. Render Queue (Card Style)
+    const actionText = isReceiver ? "Receiving" : "Sending";
+    const subText = isReceiver ? "Receiving from" : "Transferring to";
+    
+    // Update specific text spans (Adaptive UI)
+    const actionTextEl = overlay.querySelector('#transfer-action-text');
+    const directionTextEl = overlay.querySelector('#transfer-direction-text');
+    const recipientCountEl = overlay.querySelector('#recipient-count');
+    
+    if (actionTextEl) actionTextEl.textContent = actionText;
+    if (directionTextEl) directionTextEl.textContent = subText;
+    
+    // For Sender: Display Target Name. For Receiver: Display Count or Sender Name if avail.
+    if (recipientCountEl) {
+        if(!isReceiver && peerName && peerName !== "Device") {
+            recipientCountEl.textContent = peerName;
+        } else {
+             recipientCountEl.textContent = `${deviceCount || 1} devices`;
+        }
+    }
+    
+    // Update numeric values
+    const badgeEl = overlay.querySelector('#total-items-badge');
+    if (badgeEl) badgeEl.textContent = `${files.length} files`;
+
+    // 3. Render Queue (Card Style)
     const queueContainer = document.getElementById('transfer-queue');
     if (queueContainer) {
         queueContainer.innerHTML = files.map(file => {
@@ -425,10 +509,15 @@ function renderMeshNetwork(count) {
         node.style.left = `50%`;
         node.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
 
+        const peerName = (count === 1 && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))) 
+            ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')) 
+            : `Device ${i+1}`;
+
         node.innerHTML = `
-            <div class="w-16 h-16 bg-white rounded-2xl shadow-lg border border-slate-100 flex items-center justify-center mb-2 animate-bounce" style="animation-delay: ${i * 0.2}s">
-                <span class="material-symbols-outlined text-slate-400">smartphone</span>
+            <div class="w-16 h-16 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 flex items-center justify-center mb-2 animate-bounce" style="animation-delay: ${i * 0.2}s">
+                <span class="material-symbols-outlined text-slate-400 dark:text-slate-500">smartphone</span>
             </div>
+            <p class="text-[10px] font-bold text-slate-700 dark:text-slate-200 truncate max-w-[120px] mb-1">${peerName}</p>
             <span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-full uppercase">Connected</span>
         `;
         container.appendChild(node);
@@ -476,35 +565,10 @@ window.updateFileProgressUI = function(fileName, percentage) {
     // 3. TRIGGER SELESAI (Hanya jika rata-rata sudah 100%)
     if (averageProgress >= 100) {
         setTimeout(() => {
-            showTransferCompleteUI(); // Panggil layar centang hijau (Miro Gambar 5)
+            showTransferCompleteUI(); // Panggil layar completion screen
         }, 800);
     }
 };
-
-function showTransferCompleteUI() {
-    const mainContent = document.querySelector('#transfer-progress-overlay main');
-    if (!mainContent) return;
-
-    // Ganti isi overlay dengan tampilan Centang Hijau (Miro Style)
-    mainContent.innerHTML = `
-        <div class="flex-1 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
-            <div class="w-32 h-32 bg-green-500 text-white rounded-full flex items-center justify-center shadow-2xl shadow-green-500/40 mb-8">
-                <span class="material-symbols-outlined text-6xl">check</span>
-            </div>
-            <h1 class="text-5xl font-bold text-slate-900 mb-4">Transfer Complete!</h1>
-            <p class="text-slate-500 text-lg max-w-md">Successfully delivered all files to the recipients in the group.</p>
-            
-            <div class="mt-12 flex gap-4">
-                <button onclick="endTransferSession()" class="px-8 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:brightness-110 transition-all">
-                    Return Home
-                </button>
-                <button onclick="window.location.reload()" class="px-8 py-4 border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-all">
-                    Share Again
-                </button>
-            </div>
-        </div>
-    `;
-}
 
 // function endTransferSession() {
 //     const overlay = document.getElementById('transfer-progress-overlay');
@@ -517,6 +581,15 @@ function showTransferCompleteUI() {
 // }
 
 function endTransferSession() {
+    // Clear saved files from IndexedDB since transfer is complete/cancelled
+    if (window.clearFilesFromDB) {
+        window.clearFilesFromDB().then(() => {
+            console.log("[UI] Cleared saved files from IndexedDB");
+        }).catch(err => {
+            console.error("[UI] Failed to clear IndexedDB:", err);
+        });
+    }
+    
     // Panggil fungsi reset di app.js daripada reload halaman
     if (window.resetTransferState) {
         window.resetTransferState();
@@ -606,6 +679,15 @@ function handleFiles(files) {
     if (window.handleFilesSelected) {
         window.handleFilesSelected(files);
 
+        // Save to IndexedDB for persistence
+        if (window.saveFilesToDB) {
+            window.saveFilesToDB(Array.from(files)).then(() => {
+                console.log("[UI] Files saved to IndexedDB for persistence");
+            }).catch(err => {
+                console.error("[UI] Failed to save files to IndexedDB:", err);
+            });
+        }
+
         // UI Feedback
         if(window.showToast) window.showToast(`${files.length} files READY to send!`, 'success');
 
@@ -624,6 +706,48 @@ function handleFiles(files) {
     }
 }
 
+// 5. Load Saved Files on Page Load
+async function loadSavedFiles() {
+    if (!window.loadFilesFromDB) {
+        console.log("[UI] IndexedDB not available, skipping file restore");
+        return;
+    }
+    
+    try {
+        const savedFiles = await window.loadFilesFromDB();
+        if (savedFiles && savedFiles.length > 0) {
+            console.log("[UI] Restoring", savedFiles.length, "files from IndexedDB");
+            
+            // Restore to App.js
+            if (window.handleFilesSelected) {
+                window.handleFilesSelected(savedFiles);
+            }
+            
+            // Update UI
+            const titleEl = document.querySelector('#upload-zone h4');
+            const descEl = document.querySelector('#upload-zone p');
+            
+            if (titleEl) {
+                titleEl.textContent = `${savedFiles.length} File(s) Restored`;
+                titleEl.classList.add('text-primary');
+            }
+            if (descEl) descEl.textContent = "Files restored from previous session.";
+            
+            if (window.showToast) {
+                window.showToast(`${savedFiles.length} file(s) restored from previous session!`, 'info');
+            }
+        }
+    } catch (error) {
+        console.error("[UI] Error loading saved files:", error);
+    }
+}
+
+// Auto-load saved files when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait a bit for upload zone to be rendered
+    setTimeout(loadSavedFiles, 2000);
+});
+
 // Expose Global
 window.initFileUpload = initFileUpload;
 window.showTransferProgressUI = showTransferProgressUI;
@@ -638,3 +762,222 @@ window.updateDeviceListFromBackend = updateDeviceListFromBackend;
 window.openCreateGroupModal = openCreateGroupModal;
 window.closeCreateGroupModal = closeCreateGroupModal;
 window.confirmCreateGroup = confirmCreateGroup;
+
+// ==========================================
+// Transfer Complete UI Logic (Dynamic Loading)
+// ==========================================
+
+async function loadTransferCompleteView() {
+    let overlay = document.getElementById('transfer-complete-overlay');
+    if (overlay) return overlay;
+
+    try {
+        console.log("[UI] Loading transfer complete view...");
+        const response = await fetch('pages/transfer-complete.html');
+        if (!response.ok) throw new Error("Failed to load complete page");
+        
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        const nav = doc.querySelector('nav');
+        const main = doc.querySelector('main');
+        const footer = doc.querySelector('footer');
+        const decorative = doc.querySelectorAll('body > div'); // Background confettis
+        
+        if (!main) throw new Error("Invalid structure");
+
+        // Create overlay container (Full Screen, High Z-Index)
+        overlay = document.createElement('div');
+        overlay.id = 'transfer-complete-overlay';
+        overlay.className = 'fixed inset-0 z-[110] bg-slate-50 dark:bg-slate-900 flex flex-col font-sans transition-all duration-500 opacity-0';
+        
+        // Inject Decorative
+        decorative.forEach(el => overlay.appendChild(el.cloneNode(true)));
+
+        // Inject Content
+        if(nav) overlay.appendChild(nav.cloneNode(true));
+        overlay.appendChild(main.cloneNode(true));
+        if(footer) overlay.appendChild(footer.cloneNode(true));
+        
+        document.body.appendChild(overlay);
+
+        // Alias reload for compatibility
+        window.reloadApp = () => window.location.reload();
+
+        // Fade In
+        requestAnimationFrame(() => {
+            overlay.classList.remove('opacity-0');
+        });
+        
+        return overlay;
+    } catch (e) {
+        console.error("[UI] Error loading complete view:", e);
+        return null;
+    }
+}
+
+async function showTransferCompleteUI() {
+    // 1. Hide Progress Overlay
+    const progressOverlay = document.getElementById('transfer-progress-overlay');
+    if(progressOverlay) progressOverlay.style.display = 'none';
+
+    // 2. Load Complete View
+    let overlay = await loadTransferCompleteView();
+    if (!overlay) {
+        alert("Transfer Complete!");
+        window.location.reload();
+        return;
+    }
+
+    // 3. Populate Data (Real Statistics)
+    const files = window.lastTransferFiles || [];
+    const startTime = window.transferStartTime || Date.now();
+    const elapsed = Date.now() - startTime;
+    
+    // Get receiver/sender state
+    const isReceiver = window.isReceiverMode || false;
+    const deviceName = window.peerDeviceName || (isReceiver ? 'Sender' : 'Device');
+    
+    // Calculate Total Size
+    const totalSize = files.reduce((acc, file) => acc + (file.size || 0), 0);
+    
+    // Helper Formatter
+    const formatSize = (bytes) => {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+    
+    const formatTime = (ms) => {
+        if (!ms) return '0s';
+        const seconds = Math.floor(ms / 1000);
+        if (seconds < 60) return `${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        return `${minutes}m ${seconds % 60}s`;
+    };
+
+    // Update Stats Text
+    const timeEl = overlay.querySelector('#complete-time-elapsed');
+    const sizeEl = overlay.querySelector('#complete-total-size');
+    if(timeEl) timeEl.textContent = formatTime(elapsed);
+    if(sizeEl) sizeEl.textContent = formatSize(totalSize);
+
+    // Update Header Title & Description based on mode
+    const titleEl = overlay.querySelector('h1');
+    const descEl = overlay.querySelector('main > section > p');
+    
+    if (isReceiver) {
+        if (titleEl) titleEl.innerHTML = 'Files <span class="font-bold">Received!</span>';
+        if (descEl) descEl.textContent = `Successfully received all files from ${deviceName}.`;
+    } else {
+        if (titleEl) titleEl.innerHTML = 'Transfer <span class="font-bold">Complete!</span>';
+        if (descEl) descEl.textContent = `Successfully delivered all files to ${deviceName}.`;
+    }
+
+    // Get Session Name
+    const activeGroupName = document.getElementById('active-group-name')?.textContent || 'Session';
+    const groupNameEl = overlay.querySelector('#complete-group-name');
+    if (groupNameEl) groupNameEl.textContent = activeGroupName;
+
+    // Update Recipient List logic
+    const recipientListContainer = overlay.querySelector('#complete-recipient-list');
+    if (recipientListContainer) {
+        const deviceCount = window.transferRecipientCount || 1;
+        const deviceText = deviceCount === 1 ? "1 Device" : `${deviceCount} Devices`;
+        
+        recipientListContainer.innerHTML = `
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden text-green-500">
+                <span class="material-symbols-outlined">group</span>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm font-bold text-slate-700 dark:text-slate-200">${activeGroupName}</p>
+                <p class="text-[10px] font-bold text-green-500 uppercase">${deviceText} • Success</p>
+            </div>
+        </div>`;
+    }
+
+    // Update File List
+    const fileListContainer = overlay.querySelector('#complete-file-list');
+    if (fileListContainer && files.length > 0) {
+        fileListContainer.innerHTML = ''; // Clear items
+        
+        files.forEach(file => {
+            const name = file.name || 'File';
+            const sizeStr = formatSize(file.size);
+            let icon = 'description';
+            if (file.type && file.type.includes('image')) icon = 'image';
+            else if (file.type && file.type.includes('pdf')) icon = 'picture_as_pdf';
+            else if (file.name.endsWith('.zip') || file.name.endsWith('.rar')) icon = 'folder_zip';
+            
+            const newItem = document.createElement('div');
+            newItem.className = 'glass-panel p-4 rounded-3xl flex items-center gap-5 hover:border-primary/30 transition-colors';
+            newItem.innerHTML = `
+                <div class="w-20 h-20 bg-blue-50 dark:bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center overflow-hidden">
+                    <span class="material-symbols-outlined text-3xl">${icon}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="font-bold text-slate-800 dark:text-white truncate">${name}</p>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 font-medium">${sizeStr} • Completed</p>
+                </div>
+                <button class="w-10 h-10 flex items-center justify-center text-green-500 flex-shrink-0">
+                    <span class="material-symbols-outlined">check_circle</span>
+                </button>
+            `;
+            fileListContainer.appendChild(newItem);
+        });
+    }
+    
+    // Update Footer Buttons based on mode
+    const shareAgainBtn = overlay.querySelector('footer button:first-of-type');
+    if (shareAgainBtn && isReceiver) {
+        shareAgainBtn.innerHTML = `
+            <span class="material-symbols-outlined text-lg md:text-xl">folder_open</span>
+            <span class="whitespace-nowrap">Open Downloads</span>
+        `;
+        shareAgainBtn.onclick = async () => {
+            try {
+                // Call backend API to open Downloads folder
+                const response = await fetch('/api/v1/system/open-downloads');
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success toast
+                    if (window.showToast) {
+                        window.showToast('Opening Downloads folder...', 'success');
+                    }
+                    
+                    // Show file list
+                    const fileNames = window.lastDownloadedFiles || [];
+                    if (fileNames.length > 0) {
+                        setTimeout(() => {
+                            if (window.showToast) {
+                                window.showToast(`${fileNames.length} file(s) downloaded: ${fileNames.join(', ')}`, 'info');
+                            }
+                        }, 500);
+                    }
+                } else {
+                    // Fallback if API fails
+                    alert(`✓ Files downloaded to:\n${result.data?.path || 'Downloads folder'}\n\nFiles: ${(window.lastDownloadedFiles || []).join(', ')}`);
+                }
+                
+                // Return home after short delay
+                setTimeout(() => endTransferSession(), 1500);
+                
+            } catch (error) {
+                console.error('Failed to open Downloads folder:', error);
+                
+                // Fallback: show alert with file info
+                const fileNames = window.lastDownloadedFiles || [];
+                alert(`✓ Files saved to Downloads folder\n\nFiles received:\n${fileNames.map(f => '• ' + f).join('\n')}`);
+                
+                setTimeout(() => endTransferSession(), 500);
+            }
+        };
+    }
+}
+
+window.showTransferCompleteUI = showTransferCompleteUI;
