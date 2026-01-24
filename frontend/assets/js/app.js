@@ -400,6 +400,7 @@ function handleIncomingTransferOffer(data) {
     console.log("[Receiver] Incoming Offer:", data);
 
     const senderName = data.sender || "Unknown Device";
+    window.senderDeviceName = senderName; // Save for UI
 
     // 1. Ambil array files asli dari data transaksi
     const files = data.transaction.files || [];
