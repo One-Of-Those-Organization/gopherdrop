@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>GopherDrop - Groups</title>
+
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+
+    <!-- Reuse existing CSS -->
+    <link href="../assets/css/style.css" rel="stylesheet" />
+
+    <!-- Reuse Tailwind Config -->
+    <script src="../assets/js/tailwind.config.js"></script>
+</head>
+
+<body class="min-h-screen flex flex-col lg:flex-row">
+
+    <!-- Mobile Header with Menu Toggle -->
+    <header
+        class="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="bg-primary p-1.5 rounded-lg text-white">
+                <span class="material-symbols-outlined text-xl block">rocket_launch</span>
+            </div>
+            <h1 class="text-lg font-bold tracking-tight text-slate-900">GopherDrop</h1>
+        </div>
+        <button id="mobile-menu-btn" class="p-2 rounded-lg hover:bg-slate-100 transition-all">
+            <span class="material-symbols-outlined text-2xl text-slate-600">menu</span>
+        </button>
+    </header>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="closeMobileMenu()"></div>
+
+    <!-- Sidebar Container (reuse component) -->
+    <div id="sidebar-container"
+        class="flex-shrink-0 fixed lg:relative left-0 top-0 h-full z-50 transform -translate-x-full lg:translate-x-0 transition-transform duration-300"
+        data-mobile-menu></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+
+        <!-- Group List Panel (expands when no detail shown) -->
+        <div id="group-list-container"
+            class="w-full lg:flex-1 bg-slate-50/50 split-border flex flex-col h-full relative transition-all duration-300">
+            <!-- Header -->
+            <div class="p-4 lg:p-8 border-b border-slate-200 bg-white/50 backdrop-blur-sm">
+                <h2 class="text-xl lg:text-2xl font-bold text-slate-900 mb-4 lg:mb-6">Your Groups</h2>
+                <div class="relative">
+                    <span
+                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                    <input
+                        class="w-full pl-12 pr-4 py-2.5 lg:py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm font-medium"
+                        placeholder="Search groups..." type="text" id="group-search" />
+                </div>
+            </div>
+
+            <!-- Group List (rendered by JS) -->
+            <div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-2 lg:space-y-3 custom-scrollbar pb-20 lg:pb-24"
+                id="group-list">
+                <!-- Groups will be rendered here -->
+            </div>
+
+            <!-- Add Group Button -->
+            <div class="add-group-container absolute bottom-0 left-0 right-0 p-3 lg:p-4">
+                <button
+                    class="w-full flex items-center justify-center gap-2 lg:gap-3 bg-primary text-white px-4 lg:px-6 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm lg:text-base"
+                    id="add-group-btn">
+                    <span class="material-symbols-outlined">add_circle</span>
+                    Add Group
+                </button>
+            </div>
+        </div>
+
+        <!-- Group Detail Panel (hidden by default) -->
+        <div id="group-detail-container"
+            class="lg:flex-1 flex-col h-full bg-white relative hidden transition-all duration-300">
+            <!-- Back Button (Mobile only) -->
+            <button
+                class="lg:hidden absolute top-4 left-4 z-20 p-2 rounded-lg bg-white shadow-md hover:bg-slate-50 transition-all"
+                onclick="hideGroupDetail()">
+                <span class="material-symbols-outlined">arrow_back</span>
+            </button>
+
+            <!-- Header -->
+            <div
+                class="px-4 lg:px-12 py-4 lg:py-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start gap-4 sticky top-0 bg-white/80 backdrop-blur-md z-10">
+                <div class="pl-10 lg:pl-0">
+                    <div class="flex items-center gap-2 lg:gap-3 mb-1 lg:mb-2">
+                        <span class="material-symbols-outlined text-primary text-lg lg:text-base">apartment</span>
+                        <span
+                            class="text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-primary">Active
+                            Group</span>
+                    </div>
+                    <h3 class="text-xl lg:text-3xl font-bold text-slate-900" id="group-name"></h3>
+                    <p class="text-slate-500 text-sm lg:text-base mt-1" id="group-description"></p>
+                </div>
+                <div class="flex gap-2 lg:gap-3">
+                    <button
+                            class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
+                            id="edit-group-btn" onclick="navigateToEditGroup()" title="Edit Group">
+                        <span class="material-symbols-outlined text-lg lg:text-xl">edit</span>
+                    </button>
+                    <button
+                            class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-red-100 text-red-500 hover:bg-red-50"
+                            id="delete-group-btn" onclick="deleteSelectedGroup()" title="Delete Group">
+                        <span class="material-symbols-outlined text-lg lg:text-xl">delete</span>
+                    </button>
+                    <button
+                            class="p-2 lg:p-3 rounded-lg lg:rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                            onclick="hideGroupDetail()" title="Close Details">
+                        <span class="material-symbols-outlined text-lg lg:text-xl">close</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar">
+                <div class="p-4 lg:p-12 pb-24 lg:pb-32">
+                    <section>
+                        <!-- Section Header -->
+                        <div class="flex items-center justify-between mb-4 lg:mb-6">
+                            <h4
+                                class="text-[10px] lg:text-sm font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-slate-400">
+                                Member Devices</h4>
+                            <div class="flex items-center gap-2 text-primary font-bold text-xs lg:text-sm"
+                                id="online-count">
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span id="online-count-text">0 Online</span>
+                            </div>
+                        </div>
+
+                        <!-- Device Grid (rendered by JS) -->
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 lg:gap-4" id="group-devices">
+                            <!-- Devices will be rendered here -->
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Send Files Button -->
+            <div class="send-files-container p-4 lg:p-8 border-t absolute bottom-0 left-0 right-0 z-20">
+                <button
+                    class="w-full flex items-center justify-center gap-3 lg:gap-4 bg-primary text-white py-4 lg:py-5 rounded-xl lg:rounded-2xl font-bold shadow-lg shadow-primary/25 hover:brightness-105 active:scale-[0.99] transition-all"
+                    id="send-files-btn">
+                    <span class="material-symbols-outlined text-xl lg:text-2xl">send</span>
+                    <span class="text-base lg:text-lg">Send Files to Group</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <div id="add-device-to-group-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeAddDeviceToGroupModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-900">Add Online Device</h3>
+                <button onclick="closeAddDeviceToGroupModal()" class="text-slate-400 hover:text-slate-600">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <div class="p-4 max-h-64 overflow-y-auto custom-scrollbar space-y-2" id="add-device-list-container">
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button onclick="confirmAddDevicesToGroup()" class="bg-primary text-white font-bold px-4 py-2 rounded-xl text-sm shadow-lg shadow-primary/20 hover:brightness-105 transition-all">
+                    Add Selected
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="../assets/js/theme.js"></script>
+    <script src="../assets/js/fileStorage.js"></script>
+    <script src="../assets/js/components.js"></script>
+    <script type="module" src="../assets/js/auth.js"></script>
+    <script type="module" src="../assets/js/app.js"></script>
+    <script src="../assets/js/groups.js"></script>
+
+    <!-- Mobile Menu Script -->
+    <script>
+        function openMobileMenu() {
+            const sidebar = document.querySelector('[data-mobile-menu]');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.remove('-translate-x-full');
+            overlay.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileMenu() {
+            const sidebar = document.querySelector('[data-mobile-menu]');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('mobile-menu-btn')?.addEventListener('click', openMobileMenu);
+    </script>
+</body>
+</html>

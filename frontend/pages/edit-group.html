@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>GopherDrop - Edit Group</title>
+
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+    <link href="../assets/css/style.css" rel="stylesheet"/>
+
+    <script src="../assets/js/tailwind.config.js"></script>
+</head>
+<body class="min-h-screen flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
+
+<header class="lg:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+        <div class="bg-primary p-1.5 rounded-lg text-white">
+            <span class="material-symbols-outlined text-xl block">rocket_launch</span>
+        </div>
+        <h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">GopherDrop</h1>
+    </div>
+    <button id="mobile-menu-btn" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all">
+        <span class="material-symbols-outlined text-2xl text-slate-600 dark:text-slate-300">menu</span>
+    </button>
+</header>
+
+<div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="closeMobileMenu()"></div>
+
+<div id="sidebar-container" class="flex-shrink-0 fixed lg:relative left-0 top-0 h-full z-50 transform -translate-x-full lg:translate-x-0 transition-transform duration-300" data-mobile-menu></div>
+
+<main class="flex-1 flex flex-col lg:flex-row overflow-auto min-h-0">
+
+    <div class="w-full lg:w-1/2 lg:max-w-xl bg-white dark:bg-slate-800 flex flex-col h-full relative transition-colors duration-300">
+        <div class="px-4 lg:px-8 pt-4 lg:pt-8">
+            <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <a href="groups.html" class="hover:text-primary transition-colors">Groups</a>
+                <span class="material-symbols-outlined text-sm">chevron_right</span>
+                <span class="text-slate-900 dark:text-white font-medium">Edit Group</span>
+            </div>
+        </div>
+
+        <div class="px-4 lg:px-8 py-4 lg:py-6">
+            <h2 class="text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white">Group Details</h2>
+            <p class="text-slate-500 dark:text-slate-400 text-sm lg:text-base mt-1">Configure the basic settings for this group.</p>
+        </div>
+
+        <div class="flex-1 px-4 lg:px-8 pb-32">
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 mb-2">
+                        Group Name
+                    </label>
+                    <input
+                            type="text"
+                            id="group-name-input"
+                            class="w-full px-4 py-3 lg:py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-base lg:text-lg font-medium text-slate-900 dark:text-white placeholder-slate-400"
+                            value="Engineering Team"
+                    />
+                </div>
+            </div>
+        </div>
+
+        <div class="edit-group-actions absolute bottom-0 left-0 right-0 p-4 lg:p-8 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700">
+            <button class="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 hover:brightness-105 active:scale-[0.99] transition-all text-base" id="save-btn">
+                Save Changes
+            </button>
+            <button class="w-full text-red-500 font-bold py-3 mt-2 hover:text-red-600 transition-all text-sm" id="delete-btn">
+                Delete Group
+            </button>
+        </div>
+    </div>
+
+    <div class="w-full lg:flex-1 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col h-full border-l border-slate-200 dark:border-slate-700 transition-colors duration-300">
+        <div class="px-4 lg:px-8 py-4 lg:py-8">
+            <h3 class="text-xl lg:text-2xl font-bold text-slate-900 dark:text-white">Manage Devices</h3>
+            <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">Select devices to include in this group.</p>
+        </div>
+
+        <div class="px-4 lg:px-8 pb-4">
+            <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                <div class="relative flex-1">
+                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+
+                    <input
+                            class="w-full pl-12 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400"
+                            placeholder="Search devices..."
+                            type="text"
+                            id="device-search"
+                    />
+                </div>
+                <div class="flex gap-2 text-xs font-bold">
+                    <button class="px-4 py-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors" onclick="deselectAllDevices()">
+                        DESELECT ALL
+                    </button>
+                    <button class="px-4 py-2.5 text-primary hover:text-primary/80 transition-colors" onclick="selectAllDevices()">
+                        SELECT ALL
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-4 lg:px-8 pb-8 custom-scrollbar">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" id="device-selection-grid">
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="../assets/js/theme.js"></script>
+<script src="../assets/js/auth.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+    // Available devices for selection (MOCK DATA - Ganti dengan real data nantinya)
+    const availableDevices = [
+        { id: '1', name: "Daniel's MacBook", os: 'macOS 14.5', deviceId: 'MB-8829', selected: true },
+        { id: '2', name: "Main-Workstation", os: 'Windows 11', deviceId: 'PC-0012', selected: true },
+        { id: '3', name: "Lead Android", os: 'Android 14', deviceId: 'PH-9931', selected: false },
+        { id: '4', name: "Staging Server", os: 'Ubuntu 22.04', deviceId: 'SRV-X2', selected: true },
+        { id: '5', name: "Marketing PC", os: 'Windows 10', deviceId: 'PC-0482', selected: false },
+        { id: '6', name: "Design iPad", os: 'iPadOS 17', deviceId: 'TB-1102', selected: true },
+    ];
+
+    // Create selectable device card
+    function createSelectableDeviceCard(device) {
+        const selectedClass = device.selected
+            ? 'border-primary bg-primary/5 dark:bg-primary/10'
+            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600';
+
+        const checkClass = device.selected
+            ? 'bg-primary text-white'
+            : 'bg-slate-100 dark:bg-slate-700 text-transparent';
+
+        return `
+                <div class="p-3 lg:p-4 rounded-xl border-2 ${selectedClass} cursor-pointer transition-all relative"
+                     data-device-id="${device.id}"
+                     onclick="toggleDevice('${device.id}')">
+                    <div class="absolute top-2 right-2 w-5 h-5 rounded-full ${checkClass} flex items-center justify-center transition-all">
+                        <span class="material-symbols-outlined text-sm">check</span>
+                    </div>
+
+                    <h4 class="font-bold text-slate-900 dark:text-white text-sm truncate pr-6">${device.name}</h4>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1">${device.os} •</p>
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500">${device.deviceId}</p>
+                </div>
+            `;
+    }
+
+    // Render device grid
+    function renderDeviceGrid() {
+        const container = document.getElementById('device-selection-grid');
+        if (!container) return;
+        container.innerHTML = availableDevices.map(d => createSelectableDeviceCard(d)).join('');
+    }
+
+    // Toggle device selection
+    function toggleDevice(deviceId) {
+        const device = availableDevices.find(d => d.id === deviceId);
+        if (device) {
+            device.selected = !device.selected;
+            renderDeviceGrid();
+        }
+    }
+
+    // Select all devices
+    function selectAllDevices() {
+        availableDevices.forEach(d => d.selected = true);
+        renderDeviceGrid();
+    }
+
+    // Deselect all devices
+    function deselectAllDevices() {
+        availableDevices.forEach(d => d.selected = false);
+        renderDeviceGrid();
+    }
+
+    // Mobile menu functions
+    function openMobileMenu() {
+        const sidebar = document.querySelector('[data-mobile-menu]');
+        const overlay = document.getElementById('sidebar-overlay');
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileMenu() {
+        const sidebar = document.querySelector('[data-mobile-menu]');
+        const overlay = document.getElementById('sidebar-overlay');
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+        renderDeviceGrid();
+        document.getElementById('mobile-menu-btn')?.addEventListener('click', openMobileMenu);
+    });
+</script>
+</body>
+</html>
