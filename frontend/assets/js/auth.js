@@ -74,6 +74,7 @@ export async function initAuth() {
 
             const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', generatedKeyPair.publicKey);
             const publicKeyBase64 = bufferToBase64(publicKeyBuffer);
+            localStorage.setItem("gopherdrop-theme", "light"); // Set default theme
             localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, publicKeyBase64);
 
             await initDeviceID();

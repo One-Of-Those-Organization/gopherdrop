@@ -1016,165 +1016,169 @@ async function loadTransferCompleteView() {
 }
 
 async function showTransferCompleteUI() {
-    // 1. Hide Progress Overlay
+    // 1. Sembunyikan Progress Bar
     const progressOverlay = document.getElementById('transfer-progress-overlay');
     if (progressOverlay) progressOverlay.style.display = 'none';
 
-    // 2. Load Complete View
+    // 2. Load View
     let overlay = await loadTransferCompleteView();
     if (!overlay) {
-        alert("Transfer Complete!");
         window.location.reload();
         return;
     }
 
-    // 3. Populate Data (Real Statistics)
+    // --- FIX TEMA: Paksa Apply Theme saat Overlay Muncul ---
+    // Mengambil settingan terakhir user, default ke 'light'
+    const storedTheme = localStorage.getItem('gopherdrop-theme') || 'light';
+    if (window.applyTheme) {
+        window.applyTheme(storedTheme);
+    }
+    // Safety check: Paksa hapus class dark jika settingan light
+    if (storedTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+        overlay.classList.remove('dark'); // Pastikan overlay juga bersih
+    }
+    // -------------------------------------------------------
+
+    // 3. Persiapan Data
     const files = window.lastTransferFiles || [];
-    const startTime = window.transferStartTime || Date.now();
-    const elapsed = Date.now() - startTime;
-
-    // Get receiver/sender state
     const isReceiver = window.isReceiverMode || false;
-    const deviceName = window.peerDeviceName || (isReceiver ? 'Sender' : 'Device');
 
-    // Calculate Total Size
-    const totalSize = files.reduce((acc, file) => acc + (file.size || 0), 0);
+    // Logika Nama: Jika Receiver -> Tampilkan Nama Pengirim. Jika Sender -> Tampilkan Penerima.
+    const peerName = isReceiver
+        ? (window.senderDeviceName || "Unknown Sender")
+        : (window.peerDeviceName || (window.transferRecipientCount > 1 ? "Multiple Devices" : "Recipient"));
 
-    // Helper Formatter
-    const formatSize = (bytes) => {
-        if (!bytes || bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
+    const startTime = window.transferStartTime || Date.now();
+    let duration = Date.now() - startTime;
+    if (duration < 1000) duration = 1000;
 
+    const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
+
+    // Formatter Helpers
     const formatTime = (ms) => {
-        if (!ms) return '0s';
-        const seconds = Math.floor(ms / 1000);
-        if (seconds < 60) return `${seconds}s`;
-        const minutes = Math.floor(seconds / 60);
-        return `${minutes}m ${seconds % 60}s`;
+        const s = Math.floor(ms / 1000);
+        return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+    };
+    const formatSize = (b) => {
+        if (b === 0) return '0 B';
+        const i = Math.floor(Math.log(b) / Math.log(1024));
+        return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
     };
 
-    // Update Stats Text
+    // 4. Update Elemen Teks Dasar
     const timeEl = overlay.querySelector('#complete-time-elapsed');
     const sizeEl = overlay.querySelector('#complete-total-size');
-    if (timeEl) timeEl.textContent = formatTime(elapsed);
-    if (sizeEl) sizeEl.textContent = formatSize(totalSize);
-
-    // Update Header Title & Description based on mode
+    const groupNameEl = overlay.querySelector('#complete-group-name');
     const titleEl = overlay.querySelector('h1');
     const descEl = overlay.querySelector('main > section > p');
 
+    // Label kecil di atas nama (Group Insights / Sent By)
+    const cardTitleLabel = overlay.querySelector('#complete-group-name').previousElementSibling;
+
+    if (timeEl) timeEl.textContent = formatTime(duration);
+    if (sizeEl) sizeEl.textContent = formatSize(totalSize);
+    if (groupNameEl) groupNameEl.textContent = peerName;
+
+    // 5. LOGIKA ADAPTIF (SENDER vs RECEIVER)
     if (isReceiver) {
-        if (titleEl) titleEl.innerHTML = 'Files <span class="font-bold">Received!</span>';
-        if (descEl) descEl.textContent = `Successfully received all files from ${deviceName}.`;
+        // --- TAMPILAN PENERIMA ---
+        if (titleEl) titleEl.innerHTML = 'Files <span class="font-bold text-green-500">Received!</span>';
+        if (descEl) descEl.textContent = `Successfully received files from ${peerName}.`;
+
+        // Ubah "Group Insights" menjadi "SENT BY"
+        if (cardTitleLabel) cardTitleLabel.textContent = "SENT BY";
+        // Pastikan nama pengirim muncul
+        if (groupNameEl) groupNameEl.textContent = peerName;
     } else {
-        if (titleEl) titleEl.innerHTML = 'Transfer <span class="font-bold">Complete!</span>';
-        if (descEl) descEl.textContent = `Successfully delivered all files to ${deviceName}.`;
+        // --- TAMPILAN PENGIRIM ---
+        if (titleEl) titleEl.innerHTML = 'Transfer <span class="font-bold text-primary">Complete!</span>';
+        if (descEl) descEl.textContent = `Successfully delivered files to ${peerName}.`;
+
+        if (cardTitleLabel) cardTitleLabel.textContent = "RECIPIENT";
+        if (groupNameEl) groupNameEl.textContent = peerName;
     }
 
-    // Get Session Name
-    const activeGroupName = document.getElementById('active-group-name')?.textContent || 'Session';
-    const groupNameEl = overlay.querySelector('#complete-group-name');
-    if (groupNameEl) groupNameEl.textContent = activeGroupName;
-
-    // Update Recipient List logic
-    const recipientListContainer = overlay.querySelector('#complete-recipient-list');
-    if (recipientListContainer) {
-        const deviceCount = window.transferRecipientCount || 1;
-        const deviceText = deviceCount === 1 ? "1 Device" : `${deviceCount} Devices`;
-
-        recipientListContainer.innerHTML = `
-        <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden text-green-500">
-                <span class="material-symbols-outlined">group</span>
-            </div>
-            <div class="flex-1">
-                <p class="text-sm font-bold text-slate-700 dark:text-slate-200">${activeGroupName}</p>
-                <p class="text-[10px] font-bold text-green-500 uppercase">${deviceText} • Success</p>
-            </div>
-        </div>`;
-    }
-
-    // Update File List
+    // 6. RENDER LIST FILE
     const fileListContainer = overlay.querySelector('#complete-file-list');
-    if (fileListContainer && files.length > 0) {
-        fileListContainer.innerHTML = ''; // Clear items
+    if (fileListContainer) {
+        fileListContainer.innerHTML = '';
 
-        files.forEach(file => {
-            const name = file.name || 'File';
-            const sizeStr = formatSize(file.size);
+        // Jika Receiver, ambil data dari blobs agar punya URL download
+        const fileSource = isReceiver ? (window.receivedFileBlobs || []) : files;
+
+        fileSource.forEach(file => {
+            // Icon Logic Sederhana
             let icon = 'description';
             if (file.type && file.type.includes('image')) icon = 'image';
-            else if (file.type && file.type.includes('pdf')) icon = 'picture_as_pdf';
-            else if (file.name.endsWith('.zip') || file.name.endsWith('.rar')) icon = 'folder_zip';
+            else if (file.type && file.type.includes('video')) icon = 'movie';
+            else if (file.type && file.type.includes('audio')) icon = 'audio_file';
+
+            // Tombol Aksi di Kanan (Download vs Centang)
+            let actionButton = '';
+            if (isReceiver && file.url) {
+                // Tombol Re-Download (Receiver)
+                actionButton = `
+                    <a href="${file.url}" download="${file.name}" class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all" title="Download Again">
+                        <span class="material-symbols-outlined">download</span>
+                    </a>
+                `;
+            } else {
+                // Centang (Sender)
+                actionButton = `
+                    <div class="w-10 h-10 flex items-center justify-center text-green-500">
+                        <span class="material-symbols-outlined">check_circle</span>
+                    </div>
+                `;
+            }
 
             const newItem = document.createElement('div');
-            newItem.className = 'glass-panel p-4 rounded-3xl flex items-center gap-5 hover:border-primary/30 transition-colors';
+            // Gunakan class border netral agar mengikuti tema
+            newItem.className = 'glass-panel p-4 rounded-3xl flex items-center gap-4 border border-slate-200 dark:border-slate-700';
             newItem.innerHTML = `
-                <div class="w-20 h-20 bg-blue-50 dark:bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center overflow-hidden">
-                    <span class="material-symbols-outlined text-3xl">${icon}</span>
+                <div class="w-12 h-12 bg-slate-100 dark:bg-slate-700/50 text-slate-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <span class="material-symbols-outlined text-2xl">${icon}</span>
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="font-bold text-slate-800 dark:text-white truncate">${name}</p>
-                    <p class="text-xs text-slate-400 dark:text-slate-500 font-medium">${sizeStr} • Completed</p>
+                    <p class="font-bold text-slate-800 dark:text-white truncate text-sm">${file.name}</p>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase">${file.size ? formatFileSize(file.size) : ''}</p>
                 </div>
-                <button class="w-10 h-10 flex items-center justify-center text-green-500 flex-shrink-0">
-                    <span class="material-symbols-outlined">check_circle</span>
-                </button>
+                ${actionButton}
             `;
             fileListContainer.appendChild(newItem);
         });
     }
 
-    // Update Footer Buttons based on mode
-    const shareAgainBtn = overlay.querySelector('footer button:first-of-type');
-    if (shareAgainBtn && isReceiver) {
-        shareAgainBtn.innerHTML = `
-            <span class="material-symbols-outlined text-lg md:text-xl">folder_open</span>
-            <span class="whitespace-nowrap">Open Downloads</span>
+    // 7. FIX TOMBOL FOOTER (Download All & Dashboard)
+    const footerBtnContainer = overlay.querySelector('footer div:last-child');
+    if (footerBtnContainer) {
+        footerBtnContainer.innerHTML = ''; // Reset tombol bawaan HTML
+
+        if (isReceiver) {
+            // --- Tombol Khusus Receiver: DOWNLOAD ALL ---
+            footerBtnContainer.innerHTML += `
+                <button onclick="triggerDownloadAll()" class="px-6 py-3 rounded-xl bg-primary text-white font-bold hover:brightness-105 transition-all flex items-center gap-2 shadow-lg shadow-primary/20">
+                    <span class="material-symbols-outlined">download_for_offline</span>
+                    <span>Download All</span>
+                </button>
+            `;
+        } else {
+            // --- Tombol Khusus Sender: SEND MORE ---
+            footerBtnContainer.innerHTML += `
+                <button onclick="endTransferSession()" class="px-6 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+                    Send More
+                </button>
+            `;
+        }
+
+        // --- Tombol DASHBOARD (Common) ---
+        // Menggunakan endTransferSession() yang sudah diperbaiki (Reload page)
+        footerBtnContainer.innerHTML += `
+            <button onclick="endTransferSession()" class="px-6 py-3 rounded-xl bg-slate-800 dark:bg-slate-700 text-white font-bold hover:bg-slate-900 transition-all flex items-center gap-2">
+                <span class="material-symbols-outlined">home</span>
+                <span>Dashboard</span>
+            </button>
         `;
-        shareAgainBtn.onclick = async () => {
-            try {
-                // Call backend API to open Downloads folder
-                const response = await fetch('/api/v1/system/open-downloads');
-                const result = await response.json();
-
-                if (result.success) {
-                    // Show success toast
-                    if (window.showToast) {
-                        window.showToast('Opening Downloads folder...', 'success');
-                    }
-
-                    // Show file list
-                    const fileNames = window.lastDownloadedFiles || [];
-                    if (fileNames.length > 0) {
-                        setTimeout(() => {
-                            if (window.showToast) {
-                                window.showToast(`${fileNames.length} file(s) downloaded: ${fileNames.join(', ')}`, 'info');
-                            }
-                        }, 500);
-                    }
-                } else {
-                    // Fallback if API fails
-                    alert(`✓ Files downloaded to:\n${result.data?.path || 'Downloads folder'}\n\nFiles: ${(window.lastDownloadedFiles || []).join(', ')}`);
-                }
-
-                // Return home after short delay
-                setTimeout(() => endTransferSession(), 1500);
-
-            } catch (error) {
-                console.error('Failed to open Downloads folder:', error);
-
-                // Fallback: show alert with file info
-                const fileNames = window.lastDownloadedFiles || [];
-                alert(`✓ Files saved to Downloads folder\n\nFiles received:\n${fileNames.map(f => '• ' + f).join('\n')}`);
-
-                setTimeout(() => endTransferSession(), 500);
-            }
-        };
     }
 }
 

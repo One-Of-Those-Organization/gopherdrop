@@ -94,15 +94,15 @@ async function fetchNetworkSSID() {
     try {
         const response = await fetch('/api/v1/network/ssid');
         if (!response.ok) throw new Error('Failed to fetch SSID');
-        
+
         const result = await response.json();
         if (result.success && result.data) {
             const ssid = result.data.ssid || 'Unknown Network';
-            
+
             // Update desktop element
             const desktopEl = document.getElementById('network-ssid-desktop');
             if (desktopEl) desktopEl.textContent = ssid;
-            
+
             // Update mobile element
             const mobileEl = document.getElementById('network-ssid-mobile');
             if (mobileEl) mobileEl.textContent = ssid;
@@ -112,7 +112,7 @@ async function fetchNetworkSSID() {
         // Set fallback text
         const desktopEl = document.getElementById('network-ssid-desktop');
         if (desktopEl) desktopEl.textContent = 'Local Network';
-        
+
         const mobileEl = document.getElementById('network-ssid-mobile');
         if (mobileEl) mobileEl.textContent = 'Local Network';
     }
@@ -239,15 +239,15 @@ function handleSignalingMessage(msg) {
                 if (msg.data && msg.data.type === 'accept_notification' && msg.data.accepted) {
                     const responderName = msg.data.username || "Recipient";
                     showToast(`${responderName} accepted! Starting transfer...`, 'success');
-                    
+
                     // Auto-start transaction
                     if (currentTransactionId) {
                         console.log("[Sender] Auto-starting transaction after acceptance...");
-                        
+
                         // Simpan Public Key Penerima (ambil dari session storage)
                         const devices = JSON.parse(sessionStorage.getItem('gdrop_transfer_devices') || '[]');
                         if (devices.length > 0) targetPublicKey = devices[0].id;
-                        
+
                         sendSignalingMessage(WS_TYPE.START_TRANSACTION, {
                             transaction_id: currentTransactionId
                         });
@@ -278,15 +278,18 @@ function handleSignalingMessage(msg) {
 
         case WS_TYPE.START_TRANSACTION:
             console.log("START TRANSACTION RECEIVED!", msg.data);
+
+            window.transferStartTime = Date.now();
+
             showToast('Initializing Connection...', 'success');
 
             // DETEKSI LOGIKA SENDER VS RECEIVER (CRITICAL FIX)
             // Cek Transaction ID dari paket.
             // - Jika ID sama dengan currentTransactionId (yang kita buat), maka kita Sender.
             // - Jika ID beda atau kita tidak punya ID, maka kita Receiver.
-            
+
             let isInitiator = false;
-            
+
             if (msg.data && msg.data.transaction_id) {
                 if (currentTransactionId && msg.data.transaction_id === currentTransactionId) {
                     isInitiator = true;
@@ -315,7 +318,7 @@ function handleSignalingMessage(msg) {
                 } else {
                     displayFiles = [{name: "Unknown File", size: 0}];
                 }
-                
+
                 // Simpan sender device name untuk receiver
                 if (msg.data && msg.data.sender_name) {
                     window.senderDeviceName = msg.data.sender_name;
@@ -508,7 +511,7 @@ async function handleWebRTCSignal(signal) {
         // RECEIVER: Terima Offer -> Bikin Answer
         // PENTING: Set targetPublicKey agar ICE candidates bisa dikirim ke sender
         targetPublicKey = signal.from_key;
-        
+
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
@@ -558,7 +561,7 @@ function sendCurrentFile() {
         console.log("All files sent.");
         const statusEl = document.getElementById('transfer-status-text');
         if (statusEl) statusEl.textContent = "ALL COMPLETED";
-        
+
         // Show completion UI
         if (window.showTransferCompleteUI) window.showTransferCompleteUI();
         return;
@@ -647,16 +650,16 @@ function handleIncomingData(data) {
         if (incomingReceivedSize >= incomingFileInfo.size) {
             saveReceivedFile(incomingFileInfo, incomingFileBuffer);
             incomingFileInfo = null; // Reset metadata untuk file berikutnya
-            
+
             // Cek apakah semua file dalam batch sudah diterima?
             // Kita bisa cek fileQueue di sisi receiver (diisi saat START_TRANSACTION)
             // ATAU cukup cek apakah ini file terakhir di queue?
-            
+
             // Logika Sederhana:
             // Increment index file yang diterima
             if (typeof receivedFileCount === 'undefined') receivedFileCount = 0;
             receivedFileCount++;
-            
+
             // Update UI status text
             const statusEl = document.getElementById('transfer-status-text');
             if(statusEl) statusEl.textContent = `Received ${receivedFileCount} files`;
@@ -673,10 +676,17 @@ function handleIncomingData(data) {
 
 let receivedFileCount = 0; // State untuk tracking receiver
 let downloadedFiles = []; // Track downloaded files
+window.receivedFileBlobs = [];
 
 function saveReceivedFile(meta, buffers) {
     const blob = new Blob(buffers, { type: meta.mime || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
+
+    window.receivedFileBlobs.push({
+        name: meta.name,
+        url: url,
+        size: meta.size
+    });
 
     // Auto Download
     const a = document.createElement('a');
@@ -688,15 +698,52 @@ function saveReceivedFile(meta, buffers) {
 
     setTimeout(() => {
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     }, 1000);
 
     // Track downloaded file
-    downloadedFiles.push(meta.name);
-    window.lastDownloadedFiles = downloadedFiles;
+    // downloadedFiles.push(meta.name);
+    // window.lastDownloadedFiles = downloadedFiles;
+    if (!window.lastDownloadedFiles) window.lastDownloadedFiles = [];
+    window.lastDownloadedFiles.push(meta.name);
 
     showToast(`Received: ${meta.name}`, 'success');
 }
+
+// Toggle Download All Received Files
+window.triggerDownloadAll = function() {
+    if (!window.receivedFileBlobs || window.receivedFileBlobs.length === 0) {
+        showToast("No files available to download", "warning");
+        return;
+    }
+
+    showToast("Starting batch download...", "info");
+
+    window.receivedFileBlobs.forEach((file, index) => {
+        setTimeout(() => {
+            const a = document.createElement('a');
+            a.href = file.url;
+            a.download = file.name;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }, index * 500);
+    });
+};
+
+window.endTransferSession = function() {
+    // 1. Hapus state internal
+    if (window.resetTransferState) window.resetTransferState();
+
+    // 2. Hapus Blobs dari memory agar hemat RAM
+    if (window.receivedFileBlobs) {
+        window.receivedFileBlobs.forEach(f => URL.revokeObjectURL(f.url));
+        window.receivedFileBlobs = [];
+    }
+
+    // 3. FORCE RELOAD HALAMAN (Solusi Tombol Macet)
+    window.location.href = '/index.html';
+};
 
 // ==========================================
 // EXPOSE GLOBALS
@@ -785,6 +832,11 @@ function resetTransferState() {
     sessionStorage.removeItem('gdrop_transfer_devices');
     sessionStorage.removeItem('gdrop_transfer_files');
     sessionStorage.removeItem('gdrop_group_name');
+
+    if (window.receivedBlobs) {
+        window.receivedBlobs.forEach(f => URL.revokeObjectURL(f.url));
+        window.receivedBlobs = [];
+    }
 
     // 4. Tutup Overlay Progress
     const overlay = document.getElementById('transfer-progress-overlay');
