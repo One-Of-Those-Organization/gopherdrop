@@ -731,17 +731,25 @@ window.triggerDownloadAll = function() {
     });
 };
 
-window.endTransferSession = function() {
-    // 1. Hapus state internal
+window.endTransferSession = async function() {
+    console.log("[System] Ending session...");
+
     if (window.resetTransferState) window.resetTransferState();
 
-    // 2. Hapus Blobs dari memory agar hemat RAM
     if (window.receivedFileBlobs) {
         window.receivedFileBlobs.forEach(f => URL.revokeObjectURL(f.url));
         window.receivedFileBlobs = [];
     }
 
-    // 3. FORCE RELOAD HALAMAN (Solusi Tombol Macet)
+    if (window.clearFilesFromDB) {
+        try {
+            await window.clearFilesFromDB();
+            console.log("[System] Storage cleared successfully");
+        } catch (e) {
+            console.error("[System] Failed to clear storage", e);
+        }
+    }
+
     window.location.href = '/index.html';
 };
 

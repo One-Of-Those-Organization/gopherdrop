@@ -1182,4 +1182,43 @@ async function showTransferCompleteUI() {
     }
 }
 
+window.sendDirectlyToSelection = function() {
+    const selectedDevices = getSelectedDevices();
+
+    if (selectedDevices.length === 0) {
+        if (window.showToast) window.showToast('Please select at least one device', 'warning');
+        return;
+    }
+
+    // Cek apakah ada file yang dipilih?
+    const filesData = sessionStorage.getItem('gdrop_transfer_files');
+    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+
+    if (!hasFiles) {
+        // Jika tidak ada file, munculkan prompt upload, lalu lanjut kirim
+        showFileUploadPrompt(() => {
+            proceedDirectTransfer(selectedDevices);
+        });
+        return;
+    }
+
+    proceedDirectTransfer(selectedDevices);
+};
+
+// Helper untuk eksekusi transfer
+function proceedDirectTransfer(selectedDevices) {
+    // 1. Simpan target device ke session
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
+
+    // 2. Set nama sesi sementara (misal: "2 Devices" atau nama device kalau cuma 1)
+    const sessionName = selectedDevices.length === 1 ? selectedDevices[0].name : `${selectedDevices.length} Devices`;
+    sessionStorage.setItem('gdrop_group_name', sessionName);
+
+    // 3. Mulai proses transfer (panggil fungsi core di app.js)
+    if (window.startTransferProcess) {
+        window.startTransferProcess();
+        if (window.showToast) window.showToast(`Sending to ${sessionName}...`, 'success');
+    }
+}
+
 window.showTransferCompleteUI = showTransferCompleteUI;
