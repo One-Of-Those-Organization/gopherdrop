@@ -49,7 +49,7 @@ function updateGroupInStorage(groupId, updates) {
     const groups = loadGroupsFromStorage();
     const index = groups.findIndex(g => g.id === groupId);
     if (index !== -1) {
-        groups[index] = { ...groups[index], ...updates };
+        groups[index] = {...groups[index], ...updates};
         return saveGroupsToStorage(groups);
     }
     return false;
@@ -199,7 +199,7 @@ function selectGroup(groupId) {
     document.querySelectorAll('.group-item').forEach(item => {
         const h4 = item.querySelector('h4');
         item.classList.remove('active');
-        if(h4) {
+        if (h4) {
             h4.classList.remove('text-slate-900', 'dark:text-white');
             h4.classList.add('text-slate-700', 'dark:text-slate-300');
         }
@@ -209,7 +209,7 @@ function selectGroup(groupId) {
     if (selectedItem) {
         selectedItem.classList.add('active');
         const h4 = selectedItem.querySelector('h4');
-        if(h4) {
+        if (h4) {
             h4.classList.remove('text-slate-700', 'dark:text-slate-300');
             h4.classList.add('text-slate-900', 'dark:text-white');
         }
@@ -261,7 +261,7 @@ function hideGroupDetail() {
     document.querySelectorAll('.group-item').forEach(item => {
         item.classList.remove('active');
         const h4 = item.querySelector('h4');
-        if(h4) {
+        if (h4) {
             h4.classList.remove('text-slate-900', 'dark:text-white');
             h4.classList.add('text-slate-700', 'dark:text-slate-300');
         }
@@ -281,7 +281,7 @@ function triggerAddDeviceToGroup() {
 
     refreshAddDeviceList();
 
-    if(window.addDeviceInterval) clearInterval(window.addDeviceInterval);
+    if (window.addDeviceInterval) clearInterval(window.addDeviceInterval);
     window.addDeviceInterval = setInterval(refreshAddDeviceList, 2000);
 }
 
@@ -296,7 +296,9 @@ function refreshAddDeviceList() {
     const availableToAdd = window.getOnlineDevicesNotInList ? window.getOnlineDevicesNotInList(currentMemberIds) : [];
 
     tempAvailableDeviceMap = {};
-    availableToAdd.forEach(d => { tempAvailableDeviceMap[d.id] = d; });
+    availableToAdd.forEach(d => {
+        tempAvailableDeviceMap[d.id] = d;
+    });
 
     const listContainer = document.getElementById('add-device-list-container');
     if (!listContainer) return;
@@ -330,7 +332,7 @@ function refreshAddDeviceList() {
     }
 }
 
-window.toggleAddDeviceSelection = function(id) {
+window.toggleAddDeviceSelection = function (id) {
     if (!window.devicesToAddSet) window.devicesToAddSet = new Set();
 
     if (window.devicesToAddSet.has(id)) {
@@ -341,7 +343,7 @@ window.toggleAddDeviceSelection = function(id) {
     refreshAddDeviceList();
 };
 
-window.confirmAddDevicesToGroup = function() {
+window.confirmAddDevicesToGroup = function () {
     if (!selectedGroupId || !window.devicesToAddSet || window.devicesToAddSet.size === 0) {
         closeAddDeviceToGroupModal();
         return;
@@ -369,57 +371,89 @@ window.confirmAddDevicesToGroup = function() {
     saveGroupsToStorage(groups);
     selectGroup(selectedGroupId);
     closeAddDeviceToGroupModal();
-    if(window.showToast) window.showToast(`${window.devicesToAddSet.size} devices added!`, 'success');
+    if (window.showToast) window.showToast(`${window.devicesToAddSet.size} devices added!`, 'success');
 };
 
-window.closeAddDeviceToGroupModal = function() {
+window.closeAddDeviceToGroupModal = function () {
     document.getElementById('add-device-to-group-modal').classList.add('hidden');
-    if(window.addDeviceInterval) clearInterval(window.addDeviceInterval);
+    if (window.addDeviceInterval) clearInterval(window.addDeviceInterval);
 };
 
-// --- REMOVE DEVICE LOGIC ---
+// --- REMOVE DEVICE & GROUP LOGIC (CUSTOM MODAL FIX) ---
 
-function ensureDeleteModalExists() {
+// 1. Helper: Tampilkan Modal Delete (Reusable)
+function showDeleteModal(titleText, messageText, onConfirm) {
     let modal = document.getElementById('delete-group-modal');
+
+    // Create on the fly
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'delete-group-modal';
         modal.className = 'fixed inset-0 z-[100] flex items-center justify-center hidden';
+
+        // Modal HTML dengan Dark Mode & Animasi
         modal.innerHTML = `
             <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteGroupModal()"></div>
-            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl z-10 text-center">
+            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl z-10 text-center transition-all scale-95 opacity-0 transform" id="delete-modal-content">
                 <div class="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span class="material-symbols-outlined text-3xl text-red-500">delete_forever</span>
                 </div>
-                <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Group?</h3>
-                <p class="text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to delete this? This action cannot be undone.</p>
+                <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-2" id="delete-modal-title">Delete?</h3>
+                <p class="text-slate-500 dark:text-slate-400 mb-6 text-sm" id="delete-modal-desc">Are you sure?</p>
                 <div class="flex gap-3">
                     <button onclick="closeDeleteGroupModal()" class="flex-1 py-3 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">Cancel</button>
-                    <button class="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold hover:brightness-110 shadow-lg shadow-red-500/20 transition-all" id="confirm-delete-btn">Delete</button>
+                    <button id="btn-confirm-delete" class="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold hover:brightness-110 shadow-lg shadow-red-500/20 transition-all">Delete</button>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
     }
-    return modal;
+
+    // Update Text
+    document.getElementById('delete-modal-title').textContent = titleText;
+    document.getElementById('delete-modal-desc').innerHTML = messageText;
+
+    // Attach Handler (Clone to prevent multiple listeners)
+    const btn = document.getElementById('btn-confirm-delete');
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.onclick = onConfirm;
+
+    // Show with Animation
+    modal.classList.remove('hidden');
+    const content = document.getElementById('delete-modal-content');
+    setTimeout(() => {
+        content.classList.remove('scale-95', 'opacity-0');
+        content.classList.add('scale-100', 'opacity-100');
+    }, 10);
 }
 
+window.closeDeleteGroupModal = function () {
+    const modal = document.getElementById('delete-group-modal');
+    const content = document.getElementById('delete-modal-content');
+
+    if (content) {
+        content.classList.remove('scale-100', 'opacity-100');
+        content.classList.add('scale-95', 'opacity-0');
+    }
+
+    setTimeout(() => {
+        if (modal) modal.classList.add('hidden');
+    }, 200);
+}
+
+// 2. Logic: Remove Device
 let deviceIdToDelete = null;
 
-window.confirmRemoveDevice = function(deviceId) {
+window.confirmRemoveDevice = function (deviceId) {
     if (window.event) window.event.stopPropagation();
     deviceIdToDelete = deviceId;
 
-    const modal = ensureDeleteModalExists();
-    const title = modal.querySelector('h3');
-    const desc = modal.querySelector('p');
-    const btn = modal.querySelector('#confirm-delete-btn');
-
-    title.textContent = "Remove Device?";
-    desc.innerHTML = "Are you sure you want to remove this device from the group?";
-    btn.onclick = executeRemoveDevice;
-
-    modal.classList.remove('hidden');
+    showDeleteModal(
+        "Remove Device?",
+        "Are you sure you want to remove this device from the group?",
+        () => executeRemoveDevice()
+    );
 }
 
 function executeRemoveDevice() {
@@ -436,10 +470,36 @@ function executeRemoveDevice() {
         const searchInput = document.getElementById('group-search');
         renderGroups(groups, 'group-list', searchInput ? searchInput.value : "");
 
-        if(window.showToast) window.showToast('Device removed', 'info');
+        if (window.showToast) window.showToast('Device removed', 'info');
     }
 
     closeDeleteGroupModal();
+}
+
+// 3. Logic: Remove Group
+window.deleteSelectedGroup = function () {
+    if (!selectedGroupId) return;
+    const groups = loadGroupsFromStorage();
+    const group = groups.find(g => g.id === selectedGroupId);
+
+    if (!group) return;
+
+    showDeleteModal(
+        "Delete Group?",
+        `Are you sure you want to delete "<strong>${group.name}</strong>"?<br>This action cannot be undone.`,
+        () => confirmDeleteGroup()
+    );
+}
+
+function confirmDeleteGroup() {
+    if (!selectedGroupId) return;
+    deleteGroupFromStorage(selectedGroupId);
+    hideGroupDetail();
+    const groups = loadGroupsFromStorage();
+    renderGroups(groups, 'group-list');
+
+    closeDeleteGroupModal();
+    if (window.showToast) window.showToast('Group deleted successfully', 'success');
 }
 
 // ==========================================
@@ -490,13 +550,17 @@ function openAddGroupModal() {
     // Keybind Enter
     const nameInput = document.getElementById('add-group-name-input');
     if (nameInput) {
-        nameInput.onkeyup = function(e) {
+        nameInput.onkeyup = function (e) {
             if (e.key === 'Enter') confirmAddGroup();
         };
         setTimeout(() => nameInput.focus(), 50);
     }
 
     modal.classList.remove('hidden');
+}
+
+function closeAddGroupModal() {
+    document.getElementById('add-group-modal')?.classList.add('hidden');
 }
 
 function confirmAddGroup() {
@@ -574,7 +638,7 @@ function openEditGroupModal() {
     // Keybind Enter
     const nameInput = document.getElementById('edit-group-name-input');
     if (nameInput) {
-        nameInput.onkeyup = function(e) {
+        nameInput.onkeyup = function (e) {
             if (e.key === 'Enter') confirmEditGroup();
         };
         setTimeout(() => nameInput.focus(), 50);
@@ -611,7 +675,7 @@ function confirmEditGroup() {
         return;
     }
 
-    updateGroupInStorage(selectedGroupId, { name: name, description: desc });
+    updateGroupInStorage(selectedGroupId, {name: name, description: desc});
 
     document.getElementById('group-name').textContent = name;
     document.getElementById('group-description').textContent = desc || 'No description';
@@ -625,38 +689,6 @@ function confirmEditGroup() {
 
 function navigateToEditGroup() {
     openEditGroupModal();
-}
-
-function deleteSelectedGroup() {
-    if (!selectedGroupId) return;
-    const groups = loadGroupsFromStorage();
-    const group = groups.find(g => g.id === selectedGroupId);
-
-    const modal = ensureDeleteModalExists();
-    const title = modal.querySelector('h3');
-    const desc = modal.querySelector('p');
-    const btn = modal.querySelector('#confirm-delete-btn');
-
-    title.textContent = "Delete Group?";
-    desc.innerHTML = `Are you sure you want to delete "<strong>${group.name}</strong>"?`;
-    btn.onclick = confirmDeleteGroup;
-
-    modal.classList.remove('hidden');
-}
-
-function closeDeleteGroupModal() {
-    document.getElementById('delete-group-modal')?.classList.add('hidden');
-}
-
-function confirmDeleteGroup() {
-    if (!selectedGroupId) return;
-    deleteGroupFromStorage(selectedGroupId);
-    hideGroupDetail();
-    const groups = loadGroupsFromStorage();
-    renderGroups(groups, 'group-list');
-
-    closeDeleteGroupModal();
-    if (window.showToast) window.showToast('Group deleted successfully', 'success');
 }
 
 // ==========================================
@@ -786,10 +818,10 @@ function initGroupsPage() {
     }
 
     const addGroupBtn = document.getElementById('add-group-btn');
-    if(addGroupBtn) addGroupBtn.onclick = openAddGroupModal;
+    if (addGroupBtn) addGroupBtn.onclick = openAddGroupModal;
 
     const sendFilesBtn = document.getElementById('send-files-btn');
-    if(sendFilesBtn) sendFilesBtn.onclick = sendFilesToGroup;
+    if (sendFilesBtn) sendFilesBtn.onclick = sendFilesToGroup;
 
     // --- LIVE STATUS UPDATE ONLY (No Name Sync) ---
     setInterval(() => {
