@@ -389,6 +389,7 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
     window.lastTransferFiles = files;
     window.transferStartTime = Date.now();
     window.transferRecipientCount = deviceCount;
+    window.isReceiverMode = isReceiver; // Save for completion screen
 
     // 1. Ensure view is loaded
     let overlay = document.getElementById('transfer-progress-overlay');
@@ -407,10 +408,12 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
     if(mainBar) mainBar.style.width = "0%";
     // -------------------------------------------------------
 
-    // 2. Update Text Header
+    // 2. Update Text Header & Save Device Name
     const peerName = (!isReceiver && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))) 
         ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')) 
-        : (isReceiver ? "Sender" : "Device"); // Fallback for receiver (needs signaling update to get actual name)
+        : (isReceiver ? (window.senderDeviceName || "Sender") : "Device"); // Use sender name for receiver
+    
+    window.peerDeviceName = peerName; // Save for completion screen
 
     const actionText = isReceiver ? "Receiving" : "Sending";
     const subText = isReceiver ? "Receiving from" : "Transferring to";
@@ -562,35 +565,10 @@ window.updateFileProgressUI = function(fileName, percentage) {
     // 3. TRIGGER SELESAI (Hanya jika rata-rata sudah 100%)
     if (averageProgress >= 100) {
         setTimeout(() => {
-            showTransferCompleteUI(); // Panggil layar centang hijau (Miro Gambar 5)
+            showTransferCompleteUI(); // Panggil layar completion screen
         }, 800);
     }
 };
-
-function showTransferCompleteUI() {
-    const mainContent = document.querySelector('#transfer-progress-overlay main');
-    if (!mainContent) return;
-
-    // Ganti isi overlay dengan tampilan Centang Hijau (Miro Style)
-    mainContent.innerHTML = `
-        <div class="flex-1 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
-            <div class="w-32 h-32 bg-green-500 text-white rounded-full flex items-center justify-center shadow-2xl shadow-green-500/40 mb-8">
-                <span class="material-symbols-outlined text-6xl">check</span>
-            </div>
-            <h1 class="text-5xl font-bold text-slate-900 mb-4">Transfer Complete!</h1>
-            <p class="text-slate-500 text-lg max-w-md">Successfully delivered all files to the recipients in the group.</p>
-            
-            <div class="mt-12 flex gap-4">
-                <button onclick="endTransferSession()" class="px-8 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:brightness-110 transition-all">
-                    Return Home
-                </button>
-                <button onclick="window.location.reload()" class="px-8 py-4 border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-all">
-                    Share Again
-                </button>
-            </div>
-        </div>
-    `;
-}
 
 // function endTransferSession() {
 //     const overlay = document.getElementById('transfer-progress-overlay');
@@ -857,6 +835,10 @@ async function showTransferCompleteUI() {
     const startTime = window.transferStartTime || Date.now();
     const elapsed = Date.now() - startTime;
     
+    // Get receiver/sender state
+    const isReceiver = window.isReceiverMode || false;
+    const deviceName = window.peerDeviceName || (isReceiver ? 'Sender' : 'Device');
+    
     // Calculate Total Size
     const totalSize = files.reduce((acc, file) => acc + (file.size || 0), 0);
     
@@ -882,6 +864,18 @@ async function showTransferCompleteUI() {
     const sizeEl = overlay.querySelector('#complete-total-size');
     if(timeEl) timeEl.textContent = formatTime(elapsed);
     if(sizeEl) sizeEl.textContent = formatSize(totalSize);
+
+    // Update Header Title & Description based on mode
+    const titleEl = overlay.querySelector('h1');
+    const descEl = overlay.querySelector('main > section > p');
+    
+    if (isReceiver) {
+        if (titleEl) titleEl.innerHTML = 'Files <span class="font-bold">Received!</span>';
+        if (descEl) descEl.textContent = `Successfully received all files from ${deviceName}.`;
+    } else {
+        if (titleEl) titleEl.innerHTML = 'Transfer <span class="font-bold">Complete!</span>';
+        if (descEl) descEl.textContent = `Successfully delivered all files to ${deviceName}.`;
+    }
 
     // Get Session Name
     const activeGroupName = document.getElementById('active-group-name')?.textContent || 'Session';
@@ -935,6 +929,54 @@ async function showTransferCompleteUI() {
             `;
             fileListContainer.appendChild(newItem);
         });
+    }
+    
+    // Update Footer Buttons based on mode
+    const shareAgainBtn = overlay.querySelector('footer button:first-of-type');
+    if (shareAgainBtn && isReceiver) {
+        shareAgainBtn.innerHTML = `
+            <span class="material-symbols-outlined text-lg md:text-xl">folder_open</span>
+            <span class="whitespace-nowrap">Open Downloads</span>
+        `;
+        shareAgainBtn.onclick = async () => {
+            try {
+                // Call backend API to open Downloads folder
+                const response = await fetch('/api/v1/system/open-downloads');
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success toast
+                    if (window.showToast) {
+                        window.showToast('Opening Downloads folder...', 'success');
+                    }
+                    
+                    // Show file list
+                    const fileNames = window.lastDownloadedFiles || [];
+                    if (fileNames.length > 0) {
+                        setTimeout(() => {
+                            if (window.showToast) {
+                                window.showToast(`${fileNames.length} file(s) downloaded: ${fileNames.join(', ')}`, 'info');
+                            }
+                        }, 500);
+                    }
+                } else {
+                    // Fallback if API fails
+                    alert(`✓ Files downloaded to:\n${result.data?.path || 'Downloads folder'}\n\nFiles: ${(window.lastDownloadedFiles || []).join(', ')}`);
+                }
+                
+                // Return home after short delay
+                setTimeout(() => endTransferSession(), 1500);
+                
+            } catch (error) {
+                console.error('Failed to open Downloads folder:', error);
+                
+                // Fallback: show alert with file info
+                const fileNames = window.lastDownloadedFiles || [];
+                alert(`✓ Files saved to Downloads folder\n\nFiles received:\n${fileNames.map(f => '• ' + f).join('\n')}`);
+                
+                setTimeout(() => endTransferSession(), 500);
+            }
+        };
     }
 }
 
