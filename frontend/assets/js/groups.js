@@ -38,7 +38,7 @@ function createGroupItem(group) {
     const isActive = group.id === selectedGroupId;
     const activeClass = isActive ? 'active' : '';
     const textClass = isActive ? 'text-slate-900' : 'text-slate-700';
-    
+
     return `
         <div class="group-item ${activeClass} p-3 lg:p-4 rounded-xl lg:rounded-2xl border-2 border-transparent cursor-pointer" data-group-id="${group.id}" onclick="selectGroup('${group.id}')">
             <div class="flex items-center gap-3 lg:gap-4">
@@ -61,7 +61,7 @@ function createGroupDeviceCard(device) {
     const iconBg = isOnline ? 'bg-slate-50' : 'bg-slate-100';
     const iconColor = isOnline ? 'text-slate-600' : 'text-slate-400';
     const osLabel = isOnline ? 'OS' : 'Last seen';
-    
+
     return `
         <div class="device-card p-3 lg:p-4 rounded-xl lg:rounded-2xl flex items-center gap-3 lg:gap-4 ${bgClass}">
             <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-lg lg:rounded-xl ${iconBg} flex items-center justify-center ${iconColor}">
@@ -96,7 +96,7 @@ function createAddDeviceButton() {
 function renderGroups(groups, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    
+
     container.innerHTML = groups.map(group => createGroupItem(group)).join('');
 }
 
@@ -104,7 +104,7 @@ function renderGroups(groups, containerId) {
 function renderGroupDevices(devices, containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    
+
     const deviceCards = devices.map(device => createGroupDeviceCard(device)).join('');
     container.innerHTML = deviceCards + createAddDeviceButton();
 }
@@ -116,16 +116,16 @@ function selectGroup(groupId) {
         hideGroupDetail();
         return;
     }
-    
+
     selectedGroupId = groupId;
-    
+
     // Remove active from all group items
     document.querySelectorAll('.group-item').forEach(item => {
         item.classList.remove('active');
         item.querySelector('h4').classList.remove('text-slate-900');
         item.querySelector('h4').classList.add('text-slate-700');
     });
-    
+
     // Add active to selected group item
     const selectedItem = document.querySelector(`[data-group-id="${groupId}"]`);
     if (selectedItem) {
@@ -133,25 +133,25 @@ function selectGroup(groupId) {
         selectedItem.querySelector('h4').classList.remove('text-slate-700');
         selectedItem.querySelector('h4').classList.add('text-slate-900');
     }
-    
+
     // Get group data
     const group = sampleGroups.find(g => g.id === groupId);
     if (!group) return;
-    
+
     // Update group detail header
     document.getElementById('group-name').textContent = group.name;
     document.getElementById('group-description').textContent = group.description;
-    
+
     // Update online count
     const onlineCountEl = document.getElementById('online-count-text');
     if (onlineCountEl) {
         onlineCountEl.textContent = `${group.onlineCount} Online`;
     }
-    
+
     // Render devices for this group
     const devices = groupDevicesData[groupId] || [];
     renderGroupDevices(devices, 'group-devices');
-    
+
     // Show detail panel
     showGroupDetail();
 }
@@ -160,12 +160,12 @@ function selectGroup(groupId) {
 function showGroupDetail() {
     const detail = document.getElementById('group-detail-container');
     const groupList = document.getElementById('group-list-container');
-    
+
     if (detail) {
         detail.classList.remove('hidden');
         detail.classList.add('flex');
     }
-    
+
     // Shrink group list to fixed width when detail is shown
     if (groupList) {
         groupList.classList.remove('lg:flex-1');
@@ -177,18 +177,18 @@ function showGroupDetail() {
 function hideGroupDetail() {
     const detail = document.getElementById('group-detail-container');
     const groupList = document.getElementById('group-list-container');
-    
+
     if (detail) {
         detail.classList.add('hidden');
         detail.classList.remove('flex');
     }
-    
+
     // Expand group list to fill space when detail is hidden
     if (groupList) {
         groupList.classList.add('lg:flex-1');
         groupList.classList.remove('lg:w-96', 'lg:flex-shrink-0');
     }
-    
+
     // Clear selection
     selectedGroupId = null;
     document.querySelectorAll('.group-item').forEach(item => {
