@@ -1,7 +1,7 @@
 // ==========================================
 // Global State
 // ==========================================
-let currentDevices = [];
+window.currentDevices = window.currentDevices || [];
 const DEVICES_PER_PAGE = 6;
 let currentPage = 1;
 
@@ -12,20 +12,16 @@ let currentPage = 1;
 function updateDeviceListFromBackend(backendUsers) {
 
     if (!backendUsers || !Array.isArray(backendUsers)) {
-        console.warn('Invalid device list from backend', backendUsers);
         return;
     }
 
     const myPublicKey = localStorage.getItem('gdrop_public_key');
 
     // Simpan state checked biar gak ilang pas refresh polling
-    const checkedIds = new Set(currentDevices.filter(d => d.checked).map(d => d.id));
+    const checkedIds = new Set(window.currentDevices.filter(d => d.checked).map(d => d.id));
 
-    currentDevices = backendUsers
-        .filter(item => {
-            // Filter diri sendiri
-            return item.user && item.user.public_key !== myPublicKey;
-        })
+    window.currentDevices = backendUsers
+        .filter(item => item.user && item.user.public_key !== myPublicKey)
         .map((item) => {
             const userId = item.user.public_key;
             return {
@@ -33,7 +29,7 @@ function updateDeviceListFromBackend(backendUsers) {
                 name: item.user.username || 'Unknown Device',
                 icon: 'computer',
                 status: 'Connected',
-                checked: checkedIds.has(userId) // Restore checked state
+                checked: checkedIds.has(userId)
             };
         });
 
@@ -85,7 +81,7 @@ function renderDevicesWithPagination() {
     if (!container) return;
 
     // Empty State
-    if (currentDevices.length === 0) {
+    if (window.currentDevices.length === 0) {
         container.innerHTML = `
             <div class="col-span-full py-16 flex flex-col items-center justify-center text-center">
                 <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 relative">
@@ -103,7 +99,7 @@ function renderDevicesWithPagination() {
     }
 
     const startIndex = (currentPage - 1) * DEVICES_PER_PAGE;
-    const paginatedDevices = currentDevices.slice(startIndex, startIndex + DEVICES_PER_PAGE);
+    const paginatedDevices = window.currentDevices.slice(startIndex, startIndex + DEVICES_PER_PAGE);
 
     container.innerHTML = paginatedDevices.map(device => createDeviceCard(device)).join('');
 
@@ -118,7 +114,7 @@ function renderPagination() {
     const container = document.getElementById('pagination');
     if (!container) return;
 
-    const totalPages = Math.ceil(currentDevices.length / DEVICES_PER_PAGE);
+    const totalPages = Math.ceil(window.currentDevices.length / DEVICES_PER_PAGE);
 
     if (totalPages <= 1) {
         container.innerHTML = '';
@@ -146,7 +142,7 @@ function goToPage(page) {
 }
 
 function toggleDeviceSelection(deviceId) {
-    const device = currentDevices.find(d => d.id === deviceId);
+    const device = window.currentDevices.find(d => d.id === deviceId);
     if (device) {
         device.checked = !device.checked;
         renderDevicesWithPagination();
@@ -154,7 +150,7 @@ function toggleDeviceSelection(deviceId) {
 }
 
 function getSelectedDevices() {
-    return currentDevices.filter(d => d.checked);
+    return window.currentDevices.filter(d => d.checked);
 }
 
 // ==========================================
@@ -245,6 +241,16 @@ function sendToExistingGroup(groupId) {
 }
 
 function proceedWithSendToExistingGroup(groupId, group, selectedDevices) {
+    const sendBtn = document.getElementById('send-direct-btn');
+
+    if (sendBtn && sendBtn.disabled) return;
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+    }
+
+    if (window.resetTransferState) window.resetTransferState(false);
     // Add devices to group (avoid duplicates)
     const existingIds = new Set((group.devices || []).map(d => d.id));
     const newDevices = selectedDevices
@@ -258,7 +264,7 @@ function proceedWithSendToExistingGroup(groupId, group, selectedDevices) {
 
     if (newDevices.length > 0 && window.updateGroupInStorage) {
         group.devices = [...(group.devices || []), ...newDevices];
-        window.updateGroupInStorage(groupId, { devices: group.devices });
+        window.updateGroupInStorage(groupId, {devices: group.devices});
     }
 
     // Set session storage for transfer
@@ -302,11 +308,20 @@ function confirmCreateGroup() {
 }
 
 function proceedWithGroupCreation(name, selectedDevices) {
+    const sendBtn = document.getElementById('send-direct-btn');
+
+    if (sendBtn && sendBtn.disabled) return;
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+    }
+
+    if (window.resetTransferState) window.resetTransferState(false);
     // Simpan ke Session Storage buat dikirim via WS app.js
     sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
     sessionStorage.setItem('gdrop_group_name', name);
 
-    // === SAVE GROUP TO LOCALSTORAGE (Persistent) ===
     let groupId = null;
     if (window.addGroupToStorage && window.generateGroupId) {
         groupId = window.generateGroupId();
@@ -324,7 +339,6 @@ function proceedWithGroupCreation(name, selectedDevices) {
         };
         window.addGroupToStorage(newGroup);
         sessionStorage.setItem('gdrop_current_group_id', groupId);
-        console.log('[Groups] Saved new group to localStorage:', newGroup.name);
     }
     // ================================================
 
@@ -543,7 +557,6 @@ async function loadTransferProgressView() {
     if (overlay) return overlay;
 
     try {
-        console.log("[UI] Loading transfer progress view...");
         const response = await fetch('pages/transfer-progress.html');
         if (!response.ok) throw new Error("Failed to load transfer page");
 
@@ -573,7 +586,6 @@ async function loadTransferProgressView() {
 
         return overlay;
     } catch (e) {
-        console.error("[UI] Error loading transfer view:", e);
         return null;
     }
 }
@@ -639,8 +651,13 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
         queueContainer.innerHTML = files.map(file => {
             let icon = 'draft';
             let color = 'text-slate-400 bg-slate-50';
-            if (file.type && file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50'; }
-            else if (file.type && file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50'; }
+            if (file.type && file.type.includes('image')) {
+                icon = 'image';
+                color = 'text-blue-500 bg-blue-50';
+            } else if (file.type && file.type.includes('pdf')) {
+                icon = 'picture_as_pdf';
+                color = 'text-red-500 bg-red-50';
+            }
 
             const safeID = file.name.replace(/[^a-zA-Z0-9]/g, '');
             return `
@@ -778,9 +795,7 @@ function endTransferSession() {
     // Clear saved files from IndexedDB since transfer is complete/cancelled
     if (window.clearFilesFromDB) {
         window.clearFilesFromDB().then(() => {
-            console.log("[UI] Cleared saved files from IndexedDB");
         }).catch(err => {
-            console.error("[UI] Failed to clear IndexedDB:", err);
         });
     }
 
@@ -801,13 +816,11 @@ function endTransferSession() {
 // Menangani klik tombol "Select Files" dengan aman (Anti-Gagal)
 document.addEventListener('click', function (e) {
     if (e.target && (e.target.id === 'select-files-btn' || e.target.closest('#select-files-btn'))) {
-        console.log("[UI] Select Files button clicked.");
 
         let input = document.getElementById('file-upload-input');
 
         // SAFETY NET: Jika input hilang dari DOM (karena re-render), buat baru secara manual
         if (!input) {
-            console.warn("[UI] Input element missing. Creating manually...");
             input = document.createElement('input');
             input.type = 'file';
             input.id = 'file-upload-input';
@@ -838,14 +851,12 @@ document.addEventListener('change', function (e) {
 
 // 3. Init Drag & Drop (Polling elemen dinamis)
 function initFileUpload() {
-    console.log("[UI] Initializing Drag & Drop...");
 
     // Cek elemen tiap detik sampai ketemu
     const checkInterval = setInterval(() => {
         const dropZone = document.getElementById('upload-zone');
 
         if (dropZone) {
-            console.log("[UI] Drop Zone found. Listeners attached.");
             clearInterval(checkInterval);
 
             dropZone.ondragover = (e) => {
@@ -867,7 +878,6 @@ function initFileUpload() {
 
 // 4. Central File Handler
 function handleFiles(files) {
-    console.log("[UI] Processing files:", files);
 
     // Kirim ke App.js
     if (window.handleFilesSelected) {
@@ -876,9 +886,7 @@ function handleFiles(files) {
         // Save to IndexedDB for persistence
         if (window.saveFilesToDB) {
             window.saveFilesToDB(Array.from(files)).then(() => {
-                console.log("[UI] Files saved to IndexedDB for persistence");
             }).catch(err => {
-                console.error("[UI] Failed to save files to IndexedDB:", err);
             });
         }
 
@@ -896,21 +904,18 @@ function handleFiles(files) {
         if (descEl) descEl.textContent = "Click 'Create Group' above to send.";
 
     } else {
-        console.error("[UI] Error: App.js not ready (handleFilesSelected missing)");
     }
 }
 
 // 5. Load Saved Files on Page Load
 async function loadSavedFiles() {
     if (!window.loadFilesFromDB) {
-        console.log("[UI] IndexedDB not available, skipping file restore");
         return;
     }
 
     try {
         const savedFiles = await window.loadFilesFromDB();
         if (savedFiles && savedFiles.length > 0) {
-            console.log("[UI] Restoring", savedFiles.length, "files from IndexedDB");
 
             // Restore to App.js
             if (window.handleFilesSelected) {
@@ -932,7 +937,6 @@ async function loadSavedFiles() {
             }
         }
     } catch (error) {
-        console.error("[UI] Error loading saved files:", error);
     }
 }
 
@@ -970,7 +974,6 @@ async function loadTransferCompleteView() {
     if (overlay) return overlay;
 
     try {
-        console.log("[UI] Loading transfer complete view...");
         const response = await fetch('pages/transfer-complete.html');
         if (!response.ok) throw new Error("Failed to load complete page");
 
@@ -1010,7 +1013,6 @@ async function loadTransferCompleteView() {
 
         return overlay;
     } catch (e) {
-        console.error("[UI] Error loading complete view:", e);
         return null;
     }
 }
@@ -1182,7 +1184,7 @@ async function showTransferCompleteUI() {
     }
 }
 
-window.sendDirectlyToSelection = function() {
+window.sendDirectlyToSelection = function () {
     const selectedDevices = getSelectedDevices();
 
     if (selectedDevices.length === 0) {
@@ -1207,6 +1209,19 @@ window.sendDirectlyToSelection = function() {
 
 // Helper untuk eksekusi transfer
 function proceedDirectTransfer(selectedDevices) {
+    // Ambil button untuk prevent spam klik
+    const sendBtn = document.getElementById('send-direct-btn');
+
+    if (sendBtn && sendBtn.disabled) return;
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+    }
+
+    // Reset state transfer sebelumnya jika ada
+    if (window.resetTransferState) window.resetTransferState(false);
+
     // 1. Simpan target device ke session
     sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
 
@@ -1222,17 +1237,3 @@ function proceedDirectTransfer(selectedDevices) {
 }
 
 window.showTransferCompleteUI = showTransferCompleteUI;
-
-// Helper Global: Cek apakah ID device tertentu sedang Online
-window.isDeviceOnline = function(deviceId) {
-    // currentDevices adalah list yang didapat dari WebSocket (Realtime)
-    if (typeof currentDevices === 'undefined') return false;
-    return currentDevices.some(d => d.id === deviceId);
-};
-
-// Helper Global: Ambil semua device online yang BELUM ada di list tertentu (untuk fitur Add Device)
-window.getOnlineDevicesNotInList = function(existingDeviceIds) {
-    if (typeof currentDevices === 'undefined') return [];
-    const existingSet = new Set(existingDeviceIds);
-    return currentDevices.filter(d => !existingSet.has(d.id));
-};

@@ -1,7 +1,28 @@
 import {initAuth} from "./auth.js";
 
+// ==========================================
+// CONFIGURATION (SAMA DENGAN APP.JS & AUTH.JS)
+// ==========================================
+const IS_LOCALHOST = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// URL NGROK MAS (PENTING BIAR BISA SAVE)
+const PROD_HOST = 'ahmad-heliochromic-astoundedly.ngrok-free.dev';
+const LOCAL_HOST = 'localhost:8080';
+
+const PROD_API_URL = `https://${PROD_HOST}/api/v1`;
+const LOCAL_API_URL = `http://${LOCAL_HOST}/api/v1`;
+
+// Pilih Base URL
+const API_BASE = IS_LOCALHOST ? LOCAL_API_URL : PROD_API_URL;
+
+// ==========================================
+// GLOBAL VARIABLES
+// ==========================================
 let originalDeviceName = '';
 
+// ==========================================
+// INITIALIZATION
+// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     const deviceNameInput = document.getElementById('device_name');
 
@@ -24,10 +45,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load Discoverable State
     const toggle = document.getElementById('discoverable-toggle');
     const isDiscoverable = localStorage.getItem('gdrop_is_discoverable') !== 'false';
+
     if (toggle) {
         isDiscoverable ? toggle.classList.add('active') : toggle.classList.remove('active');
+
+        setTimeout(() => {
+            if (typeof window.setDiscoverable === 'function') {
+                window.setDiscoverable(isDiscoverable);
+                console.log("[Settings] Initial discovery state synced:", isDiscoverable);
+            }
+        }, 1000);
+    }
+
+    // Load Theme State for Buttons (if any)
+    const currentTheme = localStorage.getItem('gopherdrop-theme') || 'light';
+    const themeBtns = document.querySelectorAll('.theme-btn');
+    if (themeBtns) {
+        themeBtns.forEach(btn => {
+            if (btn.dataset.theme === currentTheme) {
+                btn.classList.add('border-primary', 'text-primary');
+            } else {
+                btn.classList.remove('border-primary', 'text-primary');
+            }
+
+            // Add click listener
+            btn.addEventListener('click', () => {
+                const theme = btn.dataset.theme;
+                setTheme(theme);
+                // Update UI visually
+                themeBtns.forEach(b => b.classList.remove('border-primary', 'text-primary'));
+                btn.classList.add('border-primary', 'text-primary');
+            });
+        });
     }
 });
+
+function setTheme(theme) {
+    localStorage.setItem('gopherdrop-theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+}
 
 // ==========================================
 // Helper: Update Button State
@@ -56,13 +112,17 @@ window.toggleDiscoverable = function (el) {
     // Sync with WebSocket immediately if possible
     if (typeof window.setDiscoverable === 'function') {
         window.setDiscoverable(isActive);
-        const status = isActive ? 'Visible' : 'Hidden';
-        if (window.showToast) window.showToast(`Device is now ${status}`, 'info');
+        const statusMsg = isActive ? 'Device is now Visible' : 'Device is now Hidden (Incognito)';
+        const toastType = isActive ? 'success' : 'info';
+
+        if (window.showToast) window.showToast(statusMsg, toastType);
+    } else {
+        console.warn("[Settings] window.setDiscoverable is not defined yet.");
     }
 };
 
 // ==========================================
-// Save Configuration (Identity)
+// Save Configuration (Identity) - UPDATED
 // ==========================================
 
 window.saveConfiguration = async function (isRetry = false) {
@@ -82,26 +142,27 @@ window.saveConfiguration = async function (isRetry = false) {
     try {
         // Optimistic Update Local
         localStorage.setItem('gdrop_device_name', deviceName);
+        localStorage.setItem('gdrop_device_id', deviceName); // Update ID display too
 
         // Sync to Backend
         let token = localStorage.getItem('gdrop_token');
         if (!token) token = await initAuth();
 
         if (token) {
-            const protocol = window.location.protocol;
-            const host = window.location.hostname;
-            const port = '8080';
-            const apiUrl = `${protocol}//${host}:${port}/api/v1/protected/user?token=${token}`;
+            const apiUrl = `${API_BASE}/protected/user`;
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'ngrok-skip-browser-warning': 'true'
+                },
                 body: JSON.stringify({username: deviceName})
             });
 
             // Handle Token Expired (401)
             if (response.status === 401 && !isRetry) {
-                console.warn('[Settings] Token Invalid (401). Refreshing...');
                 localStorage.removeItem('gdrop_token');
                 const newToken = await initAuth();
                 if (!newToken) throw new Error("Re-auth failed.");
@@ -129,7 +190,7 @@ window.saveConfiguration = async function (isRetry = false) {
         }
 
     } catch (error) {
-        console.error('[Settings] Save Error:', error);
+        console.error(error);
         if (window.showToast) window.showToast('Failed to sync: ' + error.message, 'error');
 
         // Re-enable button on error to allow retry
@@ -194,7 +255,6 @@ window.exportBackup = function () {
         if (window.showToast) window.showToast('Backup downloaded successfully!', 'success');
 
     } catch (e) {
-        console.error("Backup failed:", e);
         if (window.showToast) window.showToast('Failed to create backup', 'error');
     }
 };
@@ -290,13 +350,12 @@ window.handleImportFile = function (input) {
                 });
 
                 if (window.showToast) window.showToast(`Restored ${restoredCount} settings. Reloading...`, 'success');
-                localStorage.removeItem('gdrop_token');
+                localStorage.removeItem('gdrop_token'); // Clear token to force re-auth with restored keys
 
                 setTimeout(() => window.location.reload(), 1500);
             });
 
         } catch (err) {
-            console.error("Import failed:", err);
             if (window.showToast) window.showToast('Failed: Invalid backup file', 'error');
             input.value = '';
         }

@@ -1,13 +1,39 @@
-/**
- * GopherDrop - Groups Page Components
- * Persistent Groups with localStorage
- */
-
 // Storage Key
 const GROUPS_STORAGE_KEY = 'gdrop_saved_groups';
 
 // Current selected group
 let selectedGroupId = null;
+
+// Current online devices (from main app)
+window.currentDevices = [];
+
+window.isDeviceOnline = function (deviceId) {
+    return window.currentDevices.some(d => d.id === deviceId);
+};
+window.updateDeviceListFromBackend = function (backendUsers) {
+    if (!backendUsers || !Array.isArray(backendUsers)) return;
+
+    const myPublicKey = localStorage.getItem('gdrop_public_key');
+
+    window.currentDevices = backendUsers
+        .filter(item => item.user && item.user.public_key !== myPublicKey)
+        .map(item => ({
+            id: item.user.public_key,
+            name: item.user.username || 'Unknown Device',
+            icon: 'computer',
+            status: 'Connected'
+        }));
+
+    const groups = loadGroupsFromStorage();
+    const searchInput = document.getElementById('group-search');
+    renderGroups(groups, 'group-list', searchInput ? searchInput.value : "");
+
+    if (selectedGroupId) {
+        const activeGroup = groups.find(g => g.id === selectedGroupId);
+        if (activeGroup) renderGroupDevices(activeGroup.devices, 'group-devices');
+    }
+};
+
 
 // ==========================================
 // LOCAL STORAGE FUNCTIONS
@@ -18,7 +44,6 @@ function loadGroupsFromStorage() {
         const data = localStorage.getItem(GROUPS_STORAGE_KEY);
         return data ? JSON.parse(data) : [];
     } catch (e) {
-        console.error('[Groups] Error loading from storage:', e);
         return [];
     }
 }
@@ -28,7 +53,6 @@ function saveGroupsToStorage(groups) {
         localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(groups));
         return true;
     } catch (e) {
-        console.error('[Groups] Error saving to storage:', e);
         return false;
     }
 }
@@ -779,11 +803,25 @@ function triggerGroupFileSelect() {
 }
 
 function startGroupTransfer(group) {
+    const sendBtn = document.getElementById('send-files-btn');
+
+    if (sendBtn && sendBtn.disabled) return;
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+    }
+
     const devices = group.devices.map(d => ({
         id: d.id,
         name: d.name,
         icon: d.icon || 'computer'
     }));
+
+    if (window.resetTransferState) {
+        window.resetTransferState(false);
+    }
+
     sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(devices));
     sessionStorage.setItem('gdrop_group_name', group.name);
     sessionStorage.setItem('gdrop_current_group_id', group.id);
@@ -854,6 +892,12 @@ function initGroupsPage() {
         }
     });
 }
+
+window.getOnlineDevicesNotInList = function (existingIds) {
+    const existingSet = new Set(existingIds);
+    // Filter: Harus Online DAN Belum ada di grup ini
+    return window.currentDevices.filter(d => !existingSet.has(d.id));
+};
 
 document.addEventListener('DOMContentLoaded', initGroupsPage);
 
