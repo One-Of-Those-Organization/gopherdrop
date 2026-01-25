@@ -198,10 +198,12 @@ function connectToSignalingServer(token) {
     signalingSocket.onopen = () => {
         isSocketConnected = true;
 
-        // Minta list user pertama kali
+        const isDiscoverable = localStorage.getItem('gdrop_is_discoverable') !== 'false';
+
+        sendSignalingMessage(2, isDiscoverable);
+
         sendSignalingMessage(WS_TYPE.START_SHARING, null);
 
-        // Polling tiap 5 detik
         if (discoveryInterval) clearInterval(discoveryInterval);
         discoveryInterval = setInterval(() => {
             if (isSocketConnected) {
@@ -773,8 +775,10 @@ window.endTransferSession = async function () {
 // EXPOSE GLOBALS
 // ==========================================
 window.startTransferProcess = createNewTransaction;
+
 window.setDiscoverable = (isDiscoverable) => {
     sendSignalingMessage(2, isDiscoverable);
+    console.log("[WebSocket] Sent discovery state:", isDiscoverable);
 };
 
 // Dummy Network Speed
