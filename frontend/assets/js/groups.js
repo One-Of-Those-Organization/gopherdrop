@@ -10,8 +10,20 @@ window.currentDevices = [];
 window.isDeviceOnline = function (deviceId) {
     return window.currentDevices.some(d => d.id === deviceId);
 };
-window.updateDeviceListFromBackend = function (devices) {
-    window.currentDevices = devices;
+window.updateDeviceListFromBackend = function (backendUsers) {
+    if (!backendUsers || !Array.isArray(backendUsers)) return;
+
+    const myPublicKey = localStorage.getItem('gdrop_public_key');
+
+    window.currentDevices = backendUsers
+        .filter(item => item.user && item.user.public_key !== myPublicKey)
+        .map(item => ({
+            id: item.user.public_key,
+            name: item.user.username || 'Unknown Device',
+            icon: 'computer',
+            status: 'Connected'
+        }));
+
     const groups = loadGroupsFromStorage();
     const searchInput = document.getElementById('group-search');
     renderGroups(groups, 'group-list', searchInput ? searchInput.value : "");
@@ -880,6 +892,12 @@ function initGroupsPage() {
         }
     });
 }
+
+window.getOnlineDevicesNotInList = function (existingIds) {
+    const existingSet = new Set(existingIds);
+    // Filter: Harus Online DAN Belum ada di grup ini
+    return window.currentDevices.filter(d => !existingSet.has(d.id));
+};
 
 document.addEventListener('DOMContentLoaded', initGroupsPage);
 
