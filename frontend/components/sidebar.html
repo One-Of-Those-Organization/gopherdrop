@@ -1,9 +1,9 @@
 <!-- Sidebar Component -->
-<aside class="w-64 lg:w-72 bg-white sidebar-border flex flex-col min-h-screen" id="sidebar">
+<aside class="w-64 lg:w-72 bg-[var(--sidebar-bg)] sidebar-border flex flex-col min-h-screen" id="sidebar">
     <!-- Close button for mobile -->
-    <div class="lg:hidden flex justify-end p-4 border-b border-slate-100">
-        <button onclick="closeMobileMenu()" class="p-2 rounded-lg hover:bg-slate-100 transition-all">
-            <span class="material-symbols-outlined text-xl text-slate-600">close</span>
+    <div class="lg:hidden flex justify-end p-4 border-b border-[var(--border-color)]">
+        <button onclick="closeMobileMenu()" class="p-2 rounded-lg hover:bg-[var(--bg-main)] transition-all">
+            <span class="material-symbols-outlined text-xl text-[var(--text-muted)]">close</span>
         </button>
     </div>
 
@@ -13,7 +13,7 @@
             <div class="bg-primary p-2 rounded-xl text-white shadow-lg shadow-primary/20">
                 <span class="material-symbols-outlined text-2xl lg:text-3xl block">rocket_launch</span>
             </div>
-            <h1 class="text-xl lg:text-2xl font-bold tracking-tight text-slate-900">GopherDrop</h1>
+            <h1 class="text-xl lg:text-2xl font-bold tracking-tight text-[var(--text-main)]">GopherDrop</h1>
         </div>
 
         <!-- Navigation -->
