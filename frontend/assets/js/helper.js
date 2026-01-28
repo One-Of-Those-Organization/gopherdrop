@@ -1,3 +1,5 @@
+import { STORAGE_KEYS} from "./config.js";
+
 // ==========================================
 // Encoding and Decoding Functions
 // ==========================================
@@ -13,15 +15,12 @@ export function base64ToBuffer(base64) {
 }
 
 // ==========================================
-// Helper Read Device Name and Private Key
+// Storage Helpers (Getters)
 // ==========================================
-export function getPrivateKey() {
-    return localStorage.getItem('gdrop_private_key');
-}
-
-export function getDeviceName() {
-    return localStorage.getItem('gdrop_device_name');
-}
+export const getPrivateKey = () => localStorage.getItem(STORAGE_KEYS.PRIVATE_KEY);
+export const getPublicKey = () => localStorage.getItem(STORAGE_KEYS.PUBLIC_KEY);
+export const getDeviceName = () => localStorage.getItem(STORAGE_KEYS.DEVICE_NAME);
+export const getDeviceId = () => localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
 
 // ==========================================
 // Cryptographic Functions
@@ -34,77 +33,90 @@ export async function generateKeyPair() {
             true, // extractable
             ["sign", "verify"]
         );
-        console.log('[Auth] Key pair generated successfully');
-        console.log('Key Pair:', keyPair);
         return keyPair;
     } catch (error) {
-        console.error('[Auth] Failed to generate key pair:', error);
         throw error;
     }
 }
 
-// Initialize keys
-export async function savePrivateKey(keyPair) {
+export async function saveKeys(keyPair) {
+    // Export Private Key
     const privateKeyBuffer = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
-    const privateKeyBase64 = bufferToBase64(privateKeyBuffer);
-    localStorage.setItem('gdrop_private_key', privateKeyBase64);
-    console.log('[Auth] Private key stored in localStorage');
+    localStorage.setItem(STORAGE_KEYS.PRIVATE_KEY, bufferToBase64(privateKeyBuffer));
+
+    // Export Public Key
+    const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', keyPair.publicKey);
+    localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, bufferToBase64(publicKeyBuffer));
 }
 
 export async function importPrivateKey() {
     const base64 = getPrivateKey();
     if (!base64) return null;
-
-    const keyBuffer = base64ToBuffer(base64);
-
     return await window.crypto.subtle.importKey(
         "pkcs8",
-        keyBuffer,
+        base64ToBuffer(base64),
         { name: "Ed25519" },
         false,
         ["sign"]
     );
 }
-
+export async function signData(dataBase64, privateKey) {
+    const dataBytes = base64ToBuffer(dataBase64);
+    const signature = await window.crypto.subtle.sign(
+        { name: "Ed25519" },
+        privateKey,
+        dataBytes
+    );
+    return bufferToBase64(signature);
+}
 
 // ==========================================
 // Device ID Functions
 // ==========================================
-export async function initDeviceID() {
-    let deviceName = getDeviceName();
-    if (!deviceName) {
-        deviceName = crypto.randomUUID();
-        localStorage.setItem('gdrop_device_id', deviceName);
+export async function initDeviceIdentity() {
+    // Check or Create Device ID
+    let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+
+    if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
     }
 
-    if (!localStorage.getItem('gdrop_device_name')) {
-        // NOTE: CHANGE THIS TO A BETTER DEFAULT NAME IF NEEDED
-        const defaultName = navigator.userAgent.split(' ')[0];
-        localStorage.setItem('gdrop_device_name', defaultName);
+    // Set Default Name
+    if (!localStorage.getItem(STORAGE_KEYS.DEVICE_NAME)) {
+        localStorage.setItem(STORAGE_KEYS.DEVICE_NAME, deviceId);
     }
 
-    return { deviceName, name: localStorage.getItem('gdrop_device_name') };
+    // Set Default Theme
+    if (!localStorage.getItem(STORAGE_KEYS.THEME)) {
+        localStorage.setItem(STORAGE_KEYS.THEME, "light");
+    }
 }
 
 // ==========================================
-// UI/UX Helper Functions
+// UI Helpers
 // ==========================================
-function getBasePath() {
-    const path = window.location.pathname;
-    if (path.includes('/pages/')) return '../';
-    return '';
-}
-
 export async function loadComponent(elementId, componentPath) {
     const container = document.getElementById(elementId);
     if (!container) return;
     try {
-        const basePath = getBasePath();
-        const fullPath = basePath + componentPath;
-        const response = await fetch(fullPath);
-        if (!response.ok) throw new Error(`Failed to load ${fullPath}`);
+        // Handle path relative to pages folder
+        const prefix = window.location.pathname.includes('/pages/') ? '../' : '';
+        const response = await fetch(prefix + componentPath);
+        if (!response.ok) throw new Error(`Failed to load ${componentPath}`);
         container.innerHTML = await response.text();
     } catch (error) {
-        console.error('Error loading component:', error);
+        console.error("Component Load Error:", error);
     }
+}
+
+export function updateProfileUI() {
+    const nameElements = document.querySelectorAll('#user-name-display, .profile-name');
+    const name = getDeviceName();
+    nameElements.forEach(el => { el.textContent = name; });
+}
+
+export function setTheme(theme) {
+    localStorage.setItem('gopherdrop-theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
 }

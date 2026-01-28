@@ -44,17 +44,14 @@ class GopherSocket {
         const host = 'localhost:8080'; // Should ideally comes from config
         const url = `${protocol}//${host}/api/v1/protected/ws?token=${token}`;
 
-        console.log('[WS] Connecting to:', url);
         this.socket = new WebSocket(url);
 
         this.socket.onopen = () => {
-            console.log('[WS] Connected');
             this.isConnected = true;
             this.send(WSType.START_SHARING, null); // Request initial device list
         };
 
         this.socket.onclose = () => {
-            console.log('[WS] Disconnected');
             this.isConnected = false;
             // Simple reconnect logic could go here
             setTimeout(() => {
@@ -63,7 +60,6 @@ class GopherSocket {
         };
 
         this.socket.onerror = (error) => {
-            console.error('[WS] Error:', error);
         };
 
         this.socket.onmessage = (event) => {
@@ -71,7 +67,6 @@ class GopherSocket {
                 const msg = JSON.parse(event.data);
                 this.handleMessage(msg);
             } catch (e) {
-                console.error('[WS] Failed to parse message:', e);
             }
         };
     }
@@ -83,7 +78,6 @@ class GopherSocket {
      */
     send(type, data) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-            console.warn('[WS] Socket not ready');
             return;
         }
 
@@ -113,7 +107,6 @@ class GopherSocket {
     handleMessage(msg) {
         // Log all messages specifically relevant to discovery
         if (msg.type === WSType.USER_SHARE_LIST) {
-            console.log('[WS] Device List Received:', msg.data);
         }
 
         const typeHandlers = this.handlers[msg.type];
@@ -123,7 +116,6 @@ class GopherSocket {
 
         // Catch-all handler for debugging
         if (msg.type === WSType.ERROR) {
-            console.error('[WS] Server Error:', msg.data);
         }
     }
 }
@@ -137,6 +129,5 @@ window.GopherSocket.on(WSType.USER_SHARE_LIST, (devices) => {
     if (typeof updateDeviceList === 'function') {
         updateDeviceList(devices);
     } else {
-        console.warn('[WS] No updatedDeviceList function found');
     }
 });

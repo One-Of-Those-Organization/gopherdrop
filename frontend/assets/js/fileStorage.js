@@ -73,7 +73,6 @@ async function saveFilesToDB(files) {
             transaction.onerror = () => reject(transaction.error);
         });
     } catch (error) {
-        console.error('Error saving files to IndexedDB:', error);
         return false;
     }
 }
@@ -103,7 +102,6 @@ async function loadFilesFromDB() {
             request.onerror = () => reject(request.error);
         });
     } catch (error) {
-        console.error('Error loading files from IndexedDB:', error);
         return [];
     }
 }
@@ -123,7 +121,6 @@ async function clearFilesFromDB() {
             transaction.onerror = () => reject(transaction.error);
         });
     } catch (error) {
-        console.error('Error clearing files from IndexedDB:', error);
         return false;
     }
 }

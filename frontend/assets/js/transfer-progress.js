@@ -42,7 +42,6 @@ function loadTransferData() {
         renderQueue();
         
     } catch (e) {
-        console.error('Error loading data:', e);
     }
 }
 

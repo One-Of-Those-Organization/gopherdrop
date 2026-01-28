@@ -11,4 +11,5 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 
 echo [INFO] Server berjalan...
+echo [INFO] Access via: http://localhost:8080
 gopherdrop.exe

@@ -83,10 +83,8 @@ const SpeedTracker = {
                 this.updateSpeedDisplay(speedText);
             }
 
-            console.log(`[SpeedTracker] Ping: ${latencyMs.toFixed(1)}ms, Estimated: ${estimatedMbps} Mbps`);
 
         } catch (e) {
-            console.warn('[SpeedTracker] Network estimation failed:', e);
             if (!this.isTransferring) {
                 this.updateSpeedDisplay('-- MB/s');
             }
@@ -235,14 +233,12 @@ function initWebRTC() {
 
 // 1. Handle Start Transaction (Receiver)
 async function handleStartTransaction(data) {
-    console.log('[WebRTC] Transaction Started:', data);
 
     const txId = data.transaction_id;
     const senderKey = data.sender_public_key;
     const files = data.files || [];
 
     if (!senderKey) {
-        console.error('[WebRTC] Missing Sender Public Key!');
         return;
     }
 
@@ -256,7 +252,6 @@ async function handleStartTransaction(data) {
         currentFileBytes: 0
     };
 
-    console.log('[WebRTC] Initiating connection to Sender:', senderKey);
     const pc = createPeerConnection(senderKey, txId);
 
     // Create Data Channel
@@ -274,21 +269,16 @@ async function handleStartTransaction(data) {
 async function handleSignal(msg) {
     const { transaction_id, from_key, data } = msg;
 
-    console.log('[WebRTC] Signal received from', from_key, data.type || 'candidate');
-
     let pc = peerConnections[from_key];
 
     // Sender receiving Offer (First time)
     if (!pc) {
         if (data.type === 'offer') {
-            console.log('[WebRTC] Received Offer from Receiver');
             pc = createPeerConnection(from_key, transaction_id);
             pc.ondatachannel = (e) => {
-                console.log('[WebRTC] Data Channel Received');
                 setupDataChannel(e.channel, transaction_id, true);
             };
         } else {
-            console.warn('[WebRTC] Received signal for unknown peer', from_key);
             return;
         }
     }
@@ -305,7 +295,6 @@ async function handleSignal(msg) {
             await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         }
     } catch (e) {
-        console.error('[WebRTC] Signal Error:', e);
     }
 }
 
@@ -326,7 +315,6 @@ function createPeerConnection(remoteKey, txId) {
     };
 
     pc.onconnectionstatechange = () => {
-        console.log('[WebRTC] Connection State:', pc.connectionState);
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
             SpeedTracker.stop();
         }
@@ -349,7 +337,6 @@ function setupDataChannel(dc, txId, isSender = false) {
     dc.binaryType = 'arraybuffer';
 
     dc.onopen = () => {
-        console.log('[WebRTC] Data Channel Open');
         SpeedTracker.start();
 
         if (isSender) {
@@ -358,7 +345,6 @@ function setupDataChannel(dc, txId, isSender = false) {
     };
 
     dc.onclose = () => {
-        console.log('[WebRTC] Data Channel Closed');
         SpeedTracker.stop();
     };
 
@@ -373,8 +359,6 @@ function setupDataChannel(dc, txId, isSender = false) {
             transfer.receivedBytes += bytes;
             transfer.receivedChunks.push(event.data);
 
-            console.log(`[WebRTC] Received ${formatBytes(bytes)}, Total: ${formatBytes(transfer.receivedBytes)}/${formatBytes(transfer.totalBytes)}`);
-
             // Check if transfer is complete
             if (transfer.receivedBytes >= transfer.totalBytes) {
                 handleTransferComplete(txId);
@@ -383,7 +367,6 @@ function setupDataChannel(dc, txId, isSender = false) {
     };
 
     dc.onerror = (error) => {
-        console.error('[WebRTC] Data Channel Error:', error);
         SpeedTracker.stop();
     };
 }
@@ -393,13 +376,10 @@ async function startFileSend(dc, txId) {
     const files = selectedFiles;
     if (!files || files.length === 0) return;
 
-    console.log('[WebRTC] Sending files...', files);
-
     for (const file of files) {
         await sendFileInChunks(dc, file);
     }
 
-    console.log('[WebRTC] All files sent!');
     SpeedTracker.stop();
 }
 
@@ -411,8 +391,6 @@ function sendFileInChunks(dc, file) {
         reader.onload = async () => {
             const arrayBuffer = reader.result;
             const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
-
-            console.log(`[WebRTC] Sending ${file.name}: ${formatBytes(arrayBuffer.byteLength)} in ${totalChunks} chunks`);
 
             for (let i = 0; i < totalChunks; i++) {
                 const start = i * CHUNK_SIZE;
@@ -428,13 +406,11 @@ function sendFileInChunks(dc, file) {
                     dc.send(chunk);
                     SpeedTracker.addBytes(chunk.byteLength);
                 } catch (e) {
-                    console.error('[WebRTC] Send chunk failed:', e);
                     reject(e);
                     return;
                 }
             }
 
-            console.log(`[WebRTC] Finished sending: ${file.name}`);
             resolve();
         };
 
@@ -448,7 +424,6 @@ function handleTransferComplete(txId) {
     const transfer = activeTransfers[txId];
     if (!transfer) return;
 
-    console.log('[WebRTC] Transfer complete!');
     SpeedTracker.stop();
 
     // Combine chunks into files

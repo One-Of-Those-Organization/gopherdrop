@@ -32,7 +32,6 @@ function loadTransferData() {
         
         renderUI();
     } catch (e) {
-        console.error('Error loading transfer data:', e);
     }
 }
 
@@ -269,23 +268,10 @@ function confirmAddDevices() {
     closeAddDeviceModal();
 }
 
-/**
- * Cancel and go back
- */
 function cancelTransfer() {
-    // Optional: Clear session storage if you want strict state
-    // sessionStorage.removeItem('gdrop_transfer_files'); 
-    
-    // Go back to main page
     window.location.href = '../index.html';
 }
 
-/**
- * Confirm and Send
- */
-/**
- * Confirm and Send
- */
 function confirmSend() {
     if (selectedDevices.length === 0) {
         alert("No devices selected!");
