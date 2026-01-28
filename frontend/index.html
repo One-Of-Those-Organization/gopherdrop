@@ -2,19 +2,19 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>GopherDrop Dashboard</title>
-    <link href="./assets/img/logo.png" rel="icon" type="image/x-icon">
+    <link rel="icon" type="image/x-icon" href="./assets/img/logo.png">
 
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
-          rel="stylesheet"/>
+          rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-          rel="stylesheet"/>
+          rel="stylesheet" />
 
-    <link href="assets/css/style.css" rel="stylesheet"/>
+    <link href="assets/css/style.css" rel="stylesheet" />
 
     <script src="assets/js/tailwind.config.js"></script>
 </head>
@@ -29,16 +29,16 @@
         </div>
         <h1 class="text-lg font-bold tracking-tight text-slate-900">GopherDrop</h1>
     </div>
-    <button class="p-2 rounded-lg hover:bg-slate-100 transition-all" id="mobile-menu-btn">
+    <button id="mobile-menu-btn" class="p-2 rounded-lg hover:bg-slate-100 transition-all">
         <span class="material-symbols-outlined text-2xl text-slate-600">menu</span>
     </button>
 </header>
 
-<div class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" id="sidebar-overlay" onclick="closeMobileMenu()"></div>
+<div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="closeMobileMenu()"></div>
 
-<div class="flex-shrink-0 fixed lg:relative left-0 top-0 h-full z-50 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 lg:flex"
-     data-mobile-menu
-     id="sidebar-container"></div>
+<div id="sidebar-container"
+     class="flex-shrink-0 fixed lg:relative left-0 top-0 h-full z-50 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 lg:flex"
+     data-mobile-menu></div>
 
 <main class="flex-1 flex flex-col min-h-screen lg:min-h-0 overflow-y-auto">
 
@@ -47,15 +47,15 @@
         <div>
             <h2 class="text-2xl md:text-3xl font-bold text-slate-900">Local Network</h2>
             <p class="text-slate-500 font-medium text-sm md:text-base">
-                Scanning for devices on <span class="text-primary font-bold"
-                                              id="network-ssid-desktop">Loading...</span>
+                Scanning for devices on <span id="network-ssid-desktop"
+                                              class="text-primary font-bold">Loading...</span>
             </p>
         </div>
         <div class="flex gap-4">
             <div
                     class="bg-white px-4 md:px-5 py-2 md:py-2.5 rounded-full border border-slate-200 flex items-center gap-2 md:gap-3 shadow-sm text-slate-700">
                 <span class="material-symbols-outlined text-primary text-lg md:text-xl">wifi</span>
-                <span class="text-xs md:text-sm font-semibold" data-network-speed>
+                <span data-network-speed class="text-xs md:text-sm font-semibold">
                         0.0 MB/s
                     </span>
             </div>
@@ -67,13 +67,13 @@
             <div>
                 <h2 class="text-xl font-bold text-slate-900">Local Network</h2>
                 <p class="text-slate-500 text-xs">
-                    Scanning on <span class="text-primary font-bold" id="network-ssid-mobile">Loading...</span>
+                    Scanning on <span id="network-ssid-mobile" class="text-primary font-bold">Loading...</span>
                 </p>
             </div>
             <div
                     class="bg-white px-3 py-1.5 rounded-full border border-slate-200 flex items-center gap-2 shadow-sm">
                 <span class="material-symbols-outlined text-primary text-base">wifi</span>
-                <span class="text-xs font-semibold text-slate-700" data-network-speed>
+                <span data-network-speed class="text-xs font-semibold text-slate-700">
                         0.0 MB/s
                     </span>
             </div>
@@ -119,10 +119,10 @@
         </div>
     </div>
 
-    <div class="px-4 lg:px-12 pb-4 lg:pb-8 flex-shrink-0" id="upload-zone-container"></div>
+    <div id="upload-zone-container" class="px-4 lg:px-12 pb-4 lg:pb-8 flex-shrink-0"></div>
 </main>
 
-<div class="fixed inset-0 z-50 hidden" id="create-group-modal">
+<div id="create-group-modal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeCreateGroupModal()"></div>
     <div
             class="absolute inset-4 lg:inset-auto lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:w-full lg:max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
@@ -141,15 +141,14 @@
                 <label
                         class="block text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-2">Group
                     Name</label>
-                <input class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-base font-medium text-slate-900"
-                       id="new-group-name"
-                       placeholder="Enter group name..."
-                       type="text"/>
+                <input type="text" id="new-group-name"
+                       class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-base font-medium text-slate-900"
+                       placeholder="Enter group name..." />
             </div>
             <div>
                 <label
                         class="block text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-3">Selected
-                    Devices <span class="text-primary" id="selected-count-modal">(0)</span></label>
+                    Devices <span id="selected-count-modal" class="text-primary">(0)</span></label>
                 <div class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar" id="selected-devices-list"></div>
             </div>
         </div>
@@ -158,28 +157,26 @@
             <div class="flex gap-3">
                 <button
                         class="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 transition-all"
-                        onclick="closeCreateGroupModal()">Cancel
-                </button>
+                        onclick="closeCreateGroupModal()">Cancel</button>
                 <button
                         class="flex-1 py-3 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:brightness-105 active:scale-[0.99] transition-all"
-                        onclick="confirmCreateGroup()">Create Group & Send
-                </button>
+                        onclick="confirmCreateGroup()">Create Group & Send</button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center"
-     id="toast-container">
+<div id="toast-container"
+     class="fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center">
 </div>
 
 <script src="assets/js/theme.js"></script>
-<script src="assets/js/auth.js" type="module"></script>
+<script type="module" src="assets/js/auth.js"></script>
 <script src="assets/js/fileStorage.js"></script>
-<script defer src="assets/js/groups.js"></script>
-<script defer src="assets/js/components.js"></script>
-<script defer src="assets/js/mobile-nav.js"></script>
-<script src="assets/js/app.js" type="module"></script>
+<script src="assets/js/groups.js" defer></script>
+<script src="assets/js/components.js" defer></script>
+<script src="assets/js/mobile-nav.js" defer></script>
+<script type="module" src="assets/js/app.js"></script>
 </body>
 
 </html>

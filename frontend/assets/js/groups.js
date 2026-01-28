@@ -7,10 +7,10 @@ let selectedGroupId = null;
 // Current online devices (from main app)
 window.currentDevices = [];
 
-window.isDeviceOnline = function (deviceId) {
+window.isDeviceOnline = function(deviceId) {
     return window.currentDevices.some(d => d.id === deviceId);
 };
-window.updateDeviceListFromBackend = function (backendUsers) {
+window.updateDeviceListFromBackend = function(backendUsers) {
     if (!backendUsers || !Array.isArray(backendUsers)) return;
 
     const myPublicKey = localStorage.getItem('gdrop_public_key');
@@ -893,7 +893,7 @@ function initGroupsPage() {
     });
 }
 
-window.getOnlineDevicesNotInList = function (existingIds) {
+window.getOnlineDevicesNotInList = function(existingIds) {
     const existingSet = new Set(existingIds);
     // Filter: Harus Online DAN Belum ada di grup ini
     return window.currentDevices.filter(d => !existingSet.has(d.id));

@@ -264,7 +264,7 @@ function proceedWithSendToExistingGroup(groupId, group, selectedDevices) {
 
     if (newDevices.length > 0 && window.updateGroupInStorage) {
         group.devices = [...(group.devices || []), ...newDevices];
-        window.updateGroupInStorage(groupId, {devices: group.devices});
+        window.updateGroupInStorage(groupId, { devices: group.devices });
     }
 
     // Set session storage for transfer
@@ -419,27 +419,30 @@ function triggerPromptFileSelect() {
 // Toast Notification
 // ==========================================
 
+let toastTimeoutId;
+
 function showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
-    const MAX_TOASTS = 1;
 
+    // Create some New Container if not exists
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
-        container.className = 'fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center';
+        // Styling container (Fixed position top-center)
+        container.className = 'fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center w-full max-w-sm pointer-events-none';
         document.body.appendChild(container);
     }
 
-    // Hapus toast lama jika kebanyakan
-    while (container.childElementCount >= MAX_TOASTS) {
-        container.firstChild.remove();
-    }
+    // Delete the Previous Toast and replace with new one
+    container.innerHTML = '';
+    if (toastTimeoutId) clearTimeout(toastTimeoutId);
 
+    // Create Toast Element
     const toast = document.createElement('div');
 
-    // Config warna icon & border
+    // Config Color
     let icon = 'info';
-    let colorClass = 'border-blue-500 bg-white text-slate-800'; // Default info
+    let colorClass = 'border-blue-500 bg-white text-slate-800';
 
     if (type === 'success') {
         icon = 'check_circle';
@@ -452,7 +455,8 @@ function showToast(message, type = 'info') {
         colorClass = 'border-yellow-500 bg-white text-slate-800';
     }
 
-    toast.className = `flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl border-l-4 transform transition-all duration-500 -translate-y-full opacity-0 pointer-events-auto min-w-[300px] max-w-sm ${colorClass}`;
+    // Add some styling and content
+    toast.className = `flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl border-l-4 transform transition-all duration-500 -translate-y-full opacity-0 pointer-events-auto min-w-[300px] w-full ${colorClass}`;
 
     toast.innerHTML = `
         <span class="material-symbols-outlined text-2xl">${icon}</span>
@@ -465,20 +469,27 @@ function showToast(message, type = 'info') {
         </button>
     `;
 
+    // Append to container
     container.appendChild(toast);
 
-    // Animasi Masuk
+    // Animate In
     requestAnimationFrame(() => {
         toast.classList.remove('-translate-y-full', 'opacity-0');
         toast.classList.add('translate-y-0', 'opacity-100');
     });
 
-    // Auto Hapus
-    setTimeout(() => {
-        if (toast.parentElement) {
+    // Timer to auto-remove
+    toastTimeoutId = setTimeout(() => {
+        if (toast) {
+            // Animate Out
             toast.classList.remove('translate-y-0', 'opacity-100');
             toast.classList.add('-translate-y-full', 'opacity-0');
-            setTimeout(() => toast.remove(), 500);
+
+            // Delete after animation
+            setTimeout(() => {
+                // Check if still in DOM
+                if (toast.parentElement) toast.remove();
+            }, 500);
         }
     }, 4000);
 }
@@ -651,13 +662,8 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
         queueContainer.innerHTML = files.map(file => {
             let icon = 'draft';
             let color = 'text-slate-400 bg-slate-50';
-            if (file.type && file.type.includes('image')) {
-                icon = 'image';
-                color = 'text-blue-500 bg-blue-50';
-            } else if (file.type && file.type.includes('pdf')) {
-                icon = 'picture_as_pdf';
-                color = 'text-red-500 bg-red-50';
-            }
+            if (file.type && file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50'; }
+            else if (file.type && file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50'; }
 
             const safeID = file.name.replace(/[^a-zA-Z0-9]/g, '');
             return `
@@ -781,30 +787,12 @@ window.updateFileProgressUI = function (fileName, percentage) {
     }
 };
 
-// function endTransferSession() {
-//     const overlay = document.getElementById('transfer-progress-overlay');
-//     if (overlay) {
-//         overlay.classList.add('hidden');
-//         overlay.classList.remove('flex');
-//     }
-//     // Refresh page untuk reset koneksi (bersih-bersih)
-//     window.location.reload();
-// }
-
 function endTransferSession() {
-    // Clear saved files from IndexedDB since transfer is complete/cancelled
-    if (window.clearFilesFromDB) {
-        window.clearFilesFromDB().then(() => {
-        }).catch(err => {
-        });
-    }
-
-    // Panggil fungsi reset di app.js daripada reload halaman
     if (window.resetTransferState) {
         window.resetTransferState();
         if (window.showToast) window.showToast('Transfer session ended', 'info');
     } else {
-        window.location.reload(); // Fallback jika fungsi reset belum ke-load
+        window.location.reload();
     }
 }
 
@@ -1029,7 +1017,6 @@ async function showTransferCompleteUI() {
         return;
     }
 
-    // --- FIX TEMA: Paksa Apply Theme saat Overlay Muncul ---
     // Mengambil settingan terakhir user, default ke 'light'
     const storedTheme = localStorage.getItem('gopherdrop-theme') || 'light';
     if (window.applyTheme) {
@@ -1173,8 +1160,6 @@ async function showTransferCompleteUI() {
             `;
         }
 
-        // --- Tombol DASHBOARD (Common) ---
-        // Menggunakan endTransferSession() yang sudah diperbaiki (Reload page)
         footerBtnContainer.innerHTML += `
             <button onclick="endTransferSession()" class="px-6 py-3 rounded-xl bg-slate-800 dark:bg-slate-700 text-white font-bold hover:bg-slate-900 transition-all flex items-center gap-2">
                 <span class="material-symbols-outlined">home</span>
@@ -1184,7 +1169,7 @@ async function showTransferCompleteUI() {
     }
 }
 
-window.sendDirectlyToSelection = function () {
+window.sendDirectlyToSelection = function() {
     const selectedDevices = getSelectedDevices();
 
     if (selectedDevices.length === 0) {
