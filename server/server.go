@@ -1,15 +1,17 @@
 package server
 
 import (
+	"log"
+	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/websocket/v2"
 	"gorm.io/gorm"
-	"log"
-	"sync"
-	"time"
 )
+
+// User struct is defined in database.go
 
 type MinimalUser struct {
 	Username  string `json:"username"`
@@ -21,7 +23,6 @@ type ManagedUser struct {
 	User      User            `json:"-"`
 	Conn      *websocket.Conn `json:"-"`
 	JWTExpiry time.Time       `json:"-"`
-	// NOTE: will add the webrtc stuff later here
 }
 
 type Transaction struct {
@@ -33,8 +34,9 @@ type Transaction struct {
 }
 
 type TargetStatus int
+
 const (
-	Pending   TargetStatus = iota
+	Pending TargetStatus = iota
 	Accepted
 	Declined
 )
@@ -65,6 +67,8 @@ type Server struct {
 }
 
 func InitServer(url string, password string) *Server {
+	// DB is initialized in main.go and assigned to Server.DB
+
 	app := fiber.New(fiber.Config{
 		AppName: "GopherDrop Backend Ow0",
 	})
@@ -74,9 +78,11 @@ func InitServer(url string, password string) *Server {
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: false,
 	}))
+
 	return &Server{
 		App:          app,
 		Url:          url,
+		DB:           nil, // Will be set by main.go
 		Pass:         password,
 		Challenges:   make(map[string]time.Time),
 		MUser:        make(map[*websocket.Conn]*ManagedUser),
@@ -85,11 +91,9 @@ func InitServer(url string, password string) *Server {
 }
 
 func (s *Server) StartServer() {
-	log.Printf("Server started at: %s\nAccess via: http://localhost:8080\n", s.Url)
+	log.Printf("Server started at: %s\n", s.Url)
 	s.App.Listen(s.Url)
 }
-
-
 
 func StartJanitor(s *Server) {
 	go func() {
@@ -107,6 +111,7 @@ func StartJanitor(s *Server) {
 }
 
 func CacheDiscoverableUser(s *Server) {
+	s.CachedUser = make([]*ManagedUser, 0, len(s.MUser))
 	for _, user := range s.MUser {
 		if user.Conn != nil && user.User.IsDiscoverable {
 			s.CachedUser = append(s.CachedUser, user)
@@ -115,7 +120,9 @@ func CacheDiscoverableUser(s *Server) {
 }
 
 func AddCachedUser(s *Server, user *ManagedUser) {
-	s.CachedUser = append(s.CachedUser, user)
+	if user.User.IsDiscoverable {
+		s.CachedUser = append(s.CachedUser, user)
+	}
 }
 
 func DelCachedUser(s *Server, id int) {

@@ -54,6 +54,7 @@ function selectTheme(btn) {
     const theme = btn.dataset.theme;
     if (theme) {
         setTheme(theme);
+        window.showToast(`Theme set to ${theme}`, 'success');
     }
 }
 

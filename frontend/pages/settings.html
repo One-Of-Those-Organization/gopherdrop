@@ -70,17 +70,16 @@
 
                     <div class="space-y-4 lg:space-y-6">
                         <div>
-                            <label for="device_name"
-                                class="block text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-2 pl-1">
+                            <label for="device_name" class="block text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-2 pl-1">
                                 Device Display Name
                             </label>
                             <div class="flex gap-2">
                                 <input
-                                    class="flex-1 px-5 py-3 lg:py-4 text-base bg-slate-50 border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-primary outline-none transition-all placeholder-slate-300 font-medium text-slate-700"
-                                    id="device_name" placeholder="Enter device name..." type="text" />
+                                        class="flex-1 px-5 py-3 lg:py-4 text-base bg-slate-50 border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-primary outline-none transition-all placeholder-slate-300 font-medium text-slate-700"
+                                        id="device_name" placeholder="Enter device name..." type="text" />
 
                                 <button onclick="saveConfiguration()" id="save-device-btn" disabled
-                                    class="bg-primary text-white font-bold px-6 rounded-xl shadow-lg shadow-primary/20 hover:brightness-105 active:scale-95 transition-all flex items-center gap-2 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:shadow-none">
+                                        class="bg-primary text-white font-bold px-6 rounded-xl shadow-lg shadow-primary/20 hover:brightness-105 active:scale-95 transition-all flex items-center gap-2 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:shadow-none">
                                     <span class="hidden sm:inline">Save</span>
                                     <span class="material-symbols-outlined text-xl">save</span>
                                 </button>
@@ -88,45 +87,17 @@
                             <p class="text-xs text-slate-400 mt-2 pl-1">This name will be visible to other users.</p>
                         </div>
 
-                        <div
-                            class="flex items-center justify-between p-4 lg:p-5 bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all">
+                        <div class="flex items-center justify-between p-4 lg:p-5 bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all">
                             <div class="flex items-center gap-3 lg:gap-4">
                                 <div class="w-10 h-10 flex items-center justify-center bg-white rounded-lg shadow-sm">
                                     <span class="material-symbols-outlined text-slate-400">visibility</span>
                                 </div>
                                 <div>
                                     <span class="font-bold text-sm lg:text-base text-slate-900">Discoverable</span>
-                                    <p class="text-xs lg:text-sm text-slate-500">Visible to others on your local network
-                                    </p>
+                                    <p class="text-xs lg:text-sm text-slate-500">Visible to others on your local network</p>
                                 </div>
                             </div>
-                            <div id="discoverable-toggle" class="toggle-switch active"
-                                onclick="toggleDiscoverable(this)"></div>
-                        </div>
-
-                        <!-- Backup & Restore -->
-                        <div class="pt-2 border-t border-slate-100">
-                            <label
-                                class="block text-[10px] lg:text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-3 pl-1">
-                                Account Security
-                            </label>
-                            <div class="grid grid-cols-2 gap-3">
-                                <button onclick="backupIdentity()"
-                                    class="flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 hover:border-slate-300 transition-all">
-                                    <span class="material-symbols-outlined text-xl">download</span>
-                                    <span class="text-sm">Backup Keys</span>
-                                </button>
-                                <button onclick="document.getElementById('import-key-file').click()"
-                                    class="flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 hover:border-slate-300 transition-all">
-                                    <span class="material-symbols-outlined text-xl">upload</span>
-                                    <span class="text-sm">Restore Keys</span>
-                                </button>
-                            </div>
-                            <input type="file" id="import-key-file" accept=".json" class="hidden"
-                                onchange="restoreIdentity(this)" />
-                            <p class="text-xs text-slate-400 mt-2 pl-1">
-                                Backup your keys to access your account on other browsers.
-                            </p>
+                            <div id="discoverable-toggle" class="toggle-switch active" onclick="toggleDiscoverable(this)"></div>
                         </div>
                     </div>
                 </section>
@@ -161,16 +132,14 @@
     </main>
 
     <!-- Toast Container -->
-    <div id="toast-container"
-        class="fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center">
-    </div>
+    <div id="toast-container" class="fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center"></div>
 
     <script src="../assets/js/theme.js"></script>
     <script type="module" src="../assets/js/auth.js"></script>
     <script src="../assets/js/components.js" defer></script>
     <script src="../assets/js/mobile-nav.js" defer></script>
     <script type="module" src="../assets/js/app.js"></script>
-
+    <script type="module" src="../assets/js/app.js"></script>
     <script type="module" src="../assets/js/settings.js"></script>
 </body>
 

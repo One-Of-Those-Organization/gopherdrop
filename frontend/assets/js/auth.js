@@ -1,151 +1,112 @@
-// ==========================================
-// Constants and Imports
-// ==========================================
-import {bufferToBase64, base64ToBuffer, generateKeyPair, initDeviceID, savePrivateKey, importPrivateKey} from './helper.js';
+import { API_BASE_URL, API_HEADERS, STORAGE_KEYS } from './config.js';
+import {
+    getPrivateKey, getPublicKey, getDeviceName,
+    generateKeyPair, saveKeys, initDeviceIdentity,
+    importPrivateKey, signData
+} from './helper.js';
 
-// LocalStorage Keys
-const STORAGE_KEYS = {
-    PRIVATE_KEY: 'gdrop_private_key',
-    PUBLIC_KEY: 'gdrop_public_key',
-    DEVICE_ID: 'gdrop_device_id'
-};
-
-// API Endpoints
-// const API_BASE = 'http://localhost:8080/api/v1'; // Adjust to match your Go server port/address
-const API_BASE = `http://${window.location.hostname}:8080/api/v1`; // DEBUG ONLY
 const ENDPOINTS = {
-    REGISTER: `${API_BASE}/register`, // Generate new user/device
-    CHALLENGE: `${API_BASE}/challenge`, // Provide challenge for signing
-    LOGIN: `${API_BASE}/login` // Sign challenge to authenticate
+    REGISTER: `${API_BASE_URL}/register`,
+    CHALLENGE: `${API_BASE_URL}/challenge`,
+    LOGIN: `${API_BASE_URL}/login`
 };
 
 // ==========================================
-// Authentication Functions
-// ==========================================
-async function signChallenge(challengeBase64, privateKey) {
-    const challengeBytes = base64ToBuffer(challengeBase64);
-    const signature = await window.crypto.subtle.sign(
-        { name: "Ed25519" },
-        privateKey,
-        challengeBytes
-    );
-    return bufferToBase64(signature);
-}
-
-function getPrivateKey() {
-    return localStorage.getItem(STORAGE_KEYS.PRIVATE_KEY);
-}
-
-function getPublicKey() {
-    return localStorage.getItem(STORAGE_KEYS.PUBLIC_KEY);
-}
-
-function getDeviceName() {
-    return localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
-}
-
-function isRegistered() {
-    const hasPrivateKey = getPrivateKey();
-    const hasDeviceID = getDeviceName();
-    return hasPrivateKey && hasDeviceID;
-}
-
-// ==========================================
-// Creating initAuth Function
+// Main Auth Entry Point
 // ==========================================
 export async function initAuth() {
     try {
-        // [DEBUG LOGIC] Cek apakah Browser HP memblokir Crypto
-        // Comment this block if not needed
-        // if (!window.crypto || !window.crypto.subtle) {
-        //     alert("FATAL ERROR: Fitur Crypto diblokir Browser!\n\nSolusi: Buka chrome://flags, cari 'insecure origin', set Enabled untuk IP laptop ini.");
-        //     return null;
-        // }
-
+        // Is the User Has Credentials?
         let privateKey = getPrivateKey();
-        let deviceID = getDeviceName();
+        let publicKey = getPublicKey();
 
-        // Kalau belum ada kunci, generate dan registrasi
-        if (!privateKey || !deviceID) {
+        // If not, perform REGISTRATION
+        if (!privateKey || !publicKey) {
+            await performRegistration();
 
-            const generatedKeyPair = await generateKeyPair();
+            // Refresh variables after registration
+            privateKey = getPrivateKey();
+            publicKey = getPublicKey();
 
-            await savePrivateKey(generatedKeyPair);
-
-            const publicKeyBuffer = await window.crypto.subtle.exportKey('raw', generatedKeyPair.publicKey);
-            const publicKeyBase64 = bufferToBase64(publicKeyBuffer);
-            localStorage.setItem(STORAGE_KEYS.PUBLIC_KEY, publicKeyBase64);
-
-            await initDeviceID();
-
-            const response = await fetch(ENDPOINTS.REGISTER, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    username: getDeviceName(),
-                    public_key: publicKeyBase64
-                })
-            });
-
-            if (!response.ok) throw new Error('Registration failed');
-
-            // Attempt login after successful registration
-            return await initAuth();
-
-        } else {
-            // Login Flow
-            const publicKey = getPublicKey();
-            const privateKeyVal = getPrivateKey();
-
-            if (!publicKey || !privateKeyVal) {
-                return { success: false, error: 'No stored credentials' };
-            }
-
-            // 1. Get Challenge from server
-            const challengeRes = await fetch(ENDPOINTS.CHALLENGE);
-            if (!challengeRes.ok) throw new Error('Gagal konek ke Laptop (Challenge)');
-            
-            const challengeData = await challengeRes.json();
-            const challengeBase64 = challengeData.data;
-
-            // 2. Sign the challenge
-            const importedKey = await importPrivateKey();
-            const signature = await signChallenge(challengeBase64, importedKey);
-
-            // 3. Send login request
-            const loginRes = await fetch(ENDPOINTS.LOGIN, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    public_key: publicKey,
-                    challenge: challengeBase64,
-                    signature: signature
-                })
-            });
-
-            const loginData = await loginRes.json();
-
-            if (loginRes.ok && loginData.success && loginData.data) {
-                localStorage.setItem('gdrop_token', loginData.data);
-                return loginData.data;
-            } else {
-                // If the server doesn't recognize us (DB reset?), clear creds and re-register
-                if (loginData.message === "User not found") {
-                    console.warn('[Auth] User not found on server. Clearing credentials and re-registering...');
-                    localStorage.clear()
-                    return await initAuth();
-                }
-                if (loginData.message === "Authentication failed") {
-                    console.warn('[Auth] Auth failed (Key mismatch?). Clearing credentials and re-registering...');
-                    localStorage.clear()
-                    return await initAuth();
-                }
-                throw new Error(loginData.message || "Login failed");
-            }
+            // Set default theme and discoverable
+            localStorage.setItem(STORAGE_KEYS.THEME, 'light');
+            localStorage.setItem(STORAGE_KEYS.DISCOVERABLE, 'true');
         }
+
+        // Do LOGIN, if success, return token
+        const token = await performLogin(publicKey);
+
+        return token;
+
     } catch (error) {
-        alert("System Error: " + error.message);
-        console.error('[Auth] Error:', error);
-        return { success: false, error: error.message };
+        console.error("[Auth Error]", error);
+        if (error.message.includes("User not found") || error.message.includes("Authentication failed")) {
+            window.showToast('Credentials rejected. Restarting authentication...', 'error');
+            localStorage.clear();
+            window.location.reload();
+        }
+
+        return null;
     }
-};
+}
+
+// ==========================================
+// Helper: Registration Flow
+// ==========================================
+async function performRegistration() {
+    // Generate & Save Keys
+    const keyPair = await generateKeyPair();
+    await saveKeys(keyPair);
+    await initDeviceIdentity(); // Set ID & Name
+
+    // Send Public Key to Server
+    const response = await fetch(ENDPOINTS.REGISTER, {
+        method: 'POST',
+        headers: API_HEADERS,
+        body: JSON.stringify({
+            username: getDeviceName(),
+            public_key: getPublicKey()
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Registration failed: ${await response.text()}`);
+    }
+}
+
+// ==========================================
+// Helper: Login Flow
+// ==========================================
+async function performLogin(publicKey) {
+    // Request Challenge
+    const challengeRes = await fetch(ENDPOINTS.CHALLENGE, { headers: API_HEADERS });
+    if (!challengeRes.ok) throw new Error('Network error: Failed to get challenge');
+
+    const challengeJson = await challengeRes.json();
+    const challengeBase64 = challengeJson.data;
+
+    // Sign Challenge
+    const privateKeyObj = await importPrivateKey();
+    const signature = await signData(challengeBase64, privateKeyObj); // FIX: Gunakan helper signData
+
+    // Verify with Server
+    const loginRes = await fetch(ENDPOINTS.LOGIN, {
+        method: 'POST',
+        headers: API_HEADERS,
+        body: JSON.stringify({
+            public_key: publicKey,
+            challenge: challengeBase64,
+            signature: signature
+        })
+    });
+
+    const loginData = await loginRes.json();
+
+    if (!loginRes.ok || !loginData.success) {
+        throw new Error(loginData.message || "Authentication failed");
+    }
+
+    // Save Token
+    localStorage.setItem(STORAGE_KEYS.TOKEN, loginData.data);
+    return loginData.data;
+}
