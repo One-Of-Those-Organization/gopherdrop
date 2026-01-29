@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isDiscoverable ? toggleBtn.classList.add('active') : toggleBtn.classList.remove('active');
 
         // Pasang Event Listener (Menggantikan onclick di HTML yang bikin error ReferenceError)
-        toggleBtn.addEventListener('click', function() {
+        toggleBtn.addEventListener('click', function () {
             toggleDiscoverable(this);
         });
 
@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (themeBtns) {
         themeBtns.forEach(btn => {
             // Set active state visual
-            if(btn.dataset.theme === currentTheme) {
+            if (btn.dataset.theme === currentTheme) {
                 btn.classList.add('border-primary', 'text-primary');
             } else {
                 btn.classList.remove('border-primary', 'text-primary');
@@ -237,6 +237,7 @@ const BACKUP_KEYS = [
 ];
 
 // Export Backup
+// Export Backup
 window.exportBackup = function () {
     try {
         const backupData = {};
@@ -255,12 +256,18 @@ window.exportBackup = function () {
             return;
         }
 
-        backupData['_meta'] = { date: new Date().toISOString(), version: '2.0', app: 'GopherDrop' };
+        const now = new Date();
+        backupData['_meta'] = {
+            date: now.toString(),
+            version: '2.0',
+            app: 'GopherDrop'
+        };
 
         const dataStr = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([dataStr], {type: "application/json"});
+        const blob = new Blob([dataStr], { type: "application/json" });
         const url = URL.createObjectURL(blob);
-        const date = new Date().toISOString().slice(0, 10);
+
+        const date = now.toLocaleDateString('en-CA');
         const filename = `gopherdrop-backup-${date}.json`;
 
         const a = document.createElement('a');
@@ -274,6 +281,7 @@ window.exportBackup = function () {
         if (window.showToast) window.showToast('Backup downloaded!', 'success');
 
     } catch (e) {
+        console.error(e);
         if (window.showToast) window.showToast('Failed to create backup', 'error');
     }
 };
@@ -369,7 +377,7 @@ function showRestoreConfirmationModal(onConfirm) {
     // Animasi masuk
     setTimeout(() => {
         const content = document.getElementById('restore-modal-content');
-        if(content) {
+        if (content) {
             content.classList.remove('scale-95', 'opacity-0');
             content.classList.add('scale-100', 'opacity-100');
         }
