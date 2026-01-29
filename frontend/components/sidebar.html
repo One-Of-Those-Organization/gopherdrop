@@ -1,35 +1,53 @@
-<!-- Sidebar Component -->
-<aside class="w-64 lg:w-72 bg-[var(--sidebar-bg)] sidebar-border flex flex-col min-h-screen" id="sidebar">
-    <!-- Close button for mobile -->
-    <div class="lg:hidden flex justify-end p-4 border-b border-[var(--border-color)]">
-        <button onclick="closeMobileMenu()" class="p-2 rounded-lg hover:bg-[var(--bg-main)] transition-all">
-            <span class="material-symbols-outlined text-xl text-[var(--text-muted)]">close</span>
+<aside
+    class="w-64 lg:w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col min-h-screen transition-colors duration-300"
+    id="sidebar">
+
+    <div class="lg:hidden flex justify-end p-4 border-b border-slate-100 dark:border-slate-800">
+        <button onclick="closeMobileMenu()"
+            class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+            <span class="material-symbols-outlined text-xl">close</span>
         </button>
     </div>
 
     <div class="p-6 lg:p-8 flex-1">
-        <!-- Logo -->
-        <div class="flex items-center gap-3 mb-8 lg:mb-12">
-            <div class="bg-primary p-2 rounded-xl text-white shadow-lg shadow-primary/20">
-                <span class="material-symbols-outlined text-2xl lg:text-3xl block">rocket_launch</span>
+        <div class="flex items-center gap-3 mb-10">
+            <div
+                class="bg-primary p-2.5 rounded-xl text-white shadow-lg shadow-primary/20 flex items-center justify-center">
+                <span class="material-symbols-outlined text-2xl">rocket_launch</span>
             </div>
-            <h1 class="text-xl lg:text-2xl font-bold tracking-tight text-[var(--text-main)]">GopherDrop</h1>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight">GopherDrop
+                </h1>
+                <p class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">File
+                    Sharing</p>
+            </div>
         </div>
 
-        <!-- Navigation -->
-        <nav class="space-y-1 lg:space-y-2" id="main-nav">
-            <a class="nav-item" href="/index.html" data-page="dashboard" onclick="closeMobileMenu()">
-                <span class="material-symbols-outlined">dashboard</span>
+        <nav class="space-y-2" id="main-nav">
+            <a class="nav-item flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 text-sm lg:text-base group text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                href="/index.html">
+                <span class="material-symbols-outlined text-[22px]">dashboard</span>
                 <span>Dashboard</span>
             </a>
-            <a class="nav-item" href="/pages/groups.html" data-page="groups" onclick="closeMobileMenu()">
-                <span class="material-symbols-outlined">group</span>
-                <span class="font-medium">Groups</span>
+
+            <a class="nav-item flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 text-sm lg:text-base group text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                href="/pages/groups.html">
+                <span class="material-symbols-outlined text-[22px]">group_work</span>
+                <span>Groups</span>
             </a>
-            <a class="nav-item" href="/pages/settings.html" data-page="settings" onclick="closeMobileMenu()">
-                <span class="material-symbols-outlined">settings</span>
-                <span class="font-medium">Settings</span>
+
+            <a class="nav-item flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 text-sm lg:text-base group text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                href="/pages/settings.html">
+                <span class="material-symbols-outlined text-[22px]">tune</span>
+                <span>Settings</span>
             </a>
         </nav>
+    </div>
+
+    <div class="p-6 border-t border-slate-100 dark:border-slate-800">
+        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 flex items-center gap-3">
+            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Informatika UKDC</p>
+        </div>
     </div>
 </aside>

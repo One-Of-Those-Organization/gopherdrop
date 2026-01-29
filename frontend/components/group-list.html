@@ -1,28 +1,29 @@
-<!-- Group List Component -->
-<div class="w-full lg:w-96 bg-slate-50/50 split-border flex flex-col h-full relative">
-    <!-- Header -->
-    <div class="p-4 lg:p-8 border-b border-slate-200 bg-white/50 backdrop-blur-sm">
-        <h2 class="text-xl lg:text-2xl font-bold text-slate-900 mb-4 lg:mb-6">Your Groups</h2>
+<div
+    class="w-full lg:w-96 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-full relative transition-colors duration-300">
+
+    <div
+        class="p-4 lg:p-8 border-b border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm sticky top-0 z-10">
+        <h2 class="text-xl lg:text-2xl font-bold text-slate-900 dark:text-white mb-4 lg:mb-6">Your Groups</h2>
         <div class="relative">
-            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-            <input 
-                class="w-full pl-12 pr-4 py-2.5 lg:py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm font-medium" 
-                placeholder="Search groups..." 
-                type="text"
-                id="group-search"
-            />
+            <span
+                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">search</span>
+            <input
+                class="w-full pl-12 pr-4 py-2.5 lg:py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
+                placeholder="Search groups..." type="text" id="group-search" />
         </div>
     </div>
 
-    <!-- Group List -->
-    <div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-2 lg:space-y-3 custom-scrollbar pb-20 lg:pb-24" id="group-list">
-        <!-- Groups will be rendered here by JS -->
+    <div class="flex-1 overflow-y-auto p-3 lg:p-4 space-y-2 lg:space-y-3 custom-scrollbar pb-24 lg:pb-28"
+        id="group-list">
     </div>
 
-    <!-- Add Group Button -->
-    <div class="absolute bottom-0 left-0 right-0 p-3 lg:p-4 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent">
-        <button class="w-full flex items-center justify-center gap-2 lg:gap-3 bg-primary text-white px-4 lg:px-6 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm lg:text-base" id="add-group-btn">
-            <span class="material-symbols-outlined">add_circle</span>
+    <div
+        class="absolute bottom-0 left-0 right-0 p-4 lg:p-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent dark:from-slate-900 dark:via-slate-900 z-20">
+        <button
+            class="w-full flex items-center justify-center gap-2 lg:gap-3 bg-primary text-white px-4 lg:px-6 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-bold shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm lg:text-base group"
+            id="add-group-btn">
+            <span
+                class="material-symbols-outlined group-hover:rotate-90 transition-transform duration-300">add_circle</span>
             Add Group
         </button>
     </div>
