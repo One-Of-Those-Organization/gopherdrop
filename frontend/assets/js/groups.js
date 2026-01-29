@@ -1,16 +1,16 @@
 // Storage Key
-const GROUPS_STORAGE_KEY = 'gdrop_saved_groups';
+var GROUPS_STORAGE_KEY = 'gdrop_saved_groups';
 
 // Current selected group
-let selectedGroupId = null;
+var selectedGroupId = null;
 
 // Current online devices (from main app)
 window.currentDevices = [];
 
-window.isDeviceOnline = function(deviceId) {
+window.isDeviceOnline = function (deviceId) {
     return window.currentDevices.some(d => d.id === deviceId);
 };
-window.updateDeviceListFromBackend = function(backendUsers) {
+window.updateDeviceListFromBackend = function (backendUsers) {
     if (!backendUsers || !Array.isArray(backendUsers)) return;
 
     const myPublicKey = localStorage.getItem('gdrop_public_key');
@@ -73,7 +73,7 @@ function updateGroupInStorage(groupId, updates) {
     const groups = loadGroupsFromStorage();
     const index = groups.findIndex(g => g.id === groupId);
     if (index !== -1) {
-        groups[index] = {...groups[index], ...updates};
+        groups[index] = { ...groups[index], ...updates };
         return saveGroupsToStorage(groups);
     }
     return false;
@@ -84,43 +84,55 @@ function generateGroupId() {
 }
 
 // ==========================================
-// UI RENDERING FUNCTIONS
+// UI RENDERING FUNCTIONS (FULL TAILWIND)
 // ==========================================
 
 function createGroupItem(group) {
     const isActive = group.id === selectedGroupId;
-    const activeClass = isActive
-        ? 'active border-primary/50 bg-primary/5 dark:bg-primary/10'
-        : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50';
 
-    const textClass = isActive
-        ? 'text-primary font-bold'
-        : 'text-slate-900 dark:text-white font-semibold';
+    // Tailwind Logic
+    const baseClass = "p-3 lg:p-4 rounded-xl lg:rounded-2xl border-2 cursor-pointer transition-all duration-200 flex items-center gap-3 lg:gap-4 group";
 
-    const descClass = isActive
-        ? 'text-primary/80'
-        : 'text-slate-500 dark:text-slate-400';
+    const activeClass = "border-primary bg-primary/5 dark:bg-primary/10 shadow-sm";
+    const inactiveClass = "border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/50 border-slate-50 dark:border-slate-800/30";
+
+    const containerClass = isActive ? activeClass : inactiveClass;
+
+    const titleColor = isActive
+        ? "text-primary font-bold"
+        : "text-slate-900 dark:text-white font-semibold group-hover:text-slate-900 dark:group-hover:text-white";
+
+    const descColor = isActive
+        ? "text-primary/80 font-medium"
+        : "text-slate-500 dark:text-slate-400";
+
+    const iconColor = isActive
+        ? "text-primary"
+        : "text-slate-300 dark:text-slate-600 group-hover:text-slate-400";
 
     const deviceCount = group.devices ? group.devices.length : 0;
     const onlineCount = (group.devices || []).filter(d => window.isDeviceOnline && window.isDeviceOnline(d.id)).length;
 
     return `
-        <div class="group-item ${activeClass} p-3 lg:p-4 rounded-xl lg:rounded-2xl border-2 cursor-pointer transition-all duration-200" data-group-id="${group.id}" onclick="selectGroup('${group.id}')">
-            <div class="flex items-center gap-3 lg:gap-4">
-                <div class="flex-1 min-w-0">
-                    <h4 class="${textClass} text-sm lg:text-base truncate transition-colors">${group.name}</h4>
-                    <p class="text-[10px] lg:text-xs ${descClass} font-medium transition-colors">${deviceCount} Devices • ${onlineCount} Online</p>
-                </div>
-                <span class="material-symbols-outlined ${isActive ? 'text-primary' : 'text-slate-300 dark:text-slate-600'} transition-colors">chevron_right</span>
+        <div class="${baseClass} ${containerClass}" data-group-id="${group.id}" onclick="selectGroup('${group.id}')">
+            <div class="flex-1 min-w-0">
+                <h4 class="${titleColor} text-sm lg:text-base truncate transition-colors">${group.name}</h4>
+                <p class="text-[10px] lg:text-xs ${descColor} transition-colors mt-0.5">
+                    ${deviceCount} Devices • ${onlineCount} Online
+                </p>
             </div>
+            <span class="material-symbols-outlined ${iconColor} transition-colors">chevron_right</span>
         </div>
     `;
 }
 
 function createAddDeviceButton() {
+    // Tailwind Dashed Button
     return `
-        <button class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 lg:gap-3 text-slate-400 hover:border-primary hover:text-primary transition-all text-sm lg:text-base w-full h-full min-h-[100px]" id="add-device-btn" onclick="triggerAddDeviceToGroup()">
-            <span class="material-symbols-outlined">add</span>
+        <button class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 lg:gap-3 text-slate-400 dark:text-slate-500 hover:border-primary hover:text-primary dark:hover:border-primary dark:hover:text-primary transition-all text-sm lg:text-base w-full h-full min-h-[100px] group bg-transparent" id="add-device-btn" onclick="triggerAddDeviceToGroup()">
+            <div class="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-800 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+                <span class="material-symbols-outlined">add</span>
+            </div>
             <span class="font-bold">Add Device</span>
         </button>
     `;
@@ -135,16 +147,16 @@ function renderGroups(groups, containerId, searchQuery = "") {
     if (!container) return;
 
     if (!groups || groups.length === 0) {
-        const message = searchQuery ? `No groups found matching "${searchQuery}"` : "No Groups Yet";
+        const message = searchQuery ? `No groups found` : "No Groups Yet";
         const subMsg = searchQuery ? "Try different keywords" : "Create a group to get started";
 
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-16 text-center">
-                <div class="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
-                    <span class="material-symbols-outlined text-3xl text-slate-300">search_off</span>
+                <div class="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                    <span class="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600">search_off</span>
                 </div>
                 <h3 class="text-slate-900 dark:text-white font-bold text-base mb-1">${message}</h3>
-                <p class="text-slate-500 text-sm max-w-xs">${subMsg}</p>
+                <p class="text-slate-500 dark:text-slate-400 text-sm max-w-xs">${subMsg}</p>
             </div>
         `;
         return;
@@ -173,19 +185,22 @@ function renderGroupDevices(devices, containerId) {
             }
 
             const statusText = isOnline ? 'Online' : 'Saved';
-            const statusColor = isOnline ? 'bg-green-500' : 'bg-slate-300';
+            const statusColor = isOnline ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600';
             const textColor = isOnline
                 ? 'text-slate-900 dark:text-white'
                 : 'text-slate-400 dark:text-slate-500';
 
+            // Tailwind Logic for Card Background
             const bgClass = isOnline
-                ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm'
                 : 'bg-slate-50/50 dark:bg-slate-800/30 border-slate-100 dark:border-slate-700/50 border-dashed';
 
-            const iconBg = isOnline ? 'bg-primary/10 text-primary' : 'bg-slate-100 dark:bg-slate-700 text-slate-400';
+            const iconBg = isOnline
+                ? 'bg-primary/10 text-primary'
+                : 'bg-slate-100 dark:bg-slate-700 text-slate-400';
 
             return `
-                <div class="device-card p-4 rounded-2xl border ${bgClass} flex items-center gap-4 transition-all">
+                <div class="p-4 rounded-2xl border ${bgClass} flex items-center gap-4 transition-all">
                     <div class="w-12 h-12 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0">
                         <span class="material-symbols-outlined text-2xl">${device.icon || 'computer'}</span>
                     </div>
@@ -193,7 +208,7 @@ function renderGroupDevices(devices, containerId) {
                         <p class="font-bold ${textColor} truncate text-sm lg:text-base">${displayName}</p>
                         <div class="flex items-center gap-2 mt-1">
                             <span class="w-2 h-2 rounded-full ${statusColor} ${isOnline ? 'animate-pulse' : ''}"></span>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">${statusText}</span>
+                            <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">${statusText}</span>
                         </div>
                     </div>
                     <button onclick="confirmRemoveDevice('${device.id}')" class="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all" title="Remove Device">
@@ -203,9 +218,11 @@ function renderGroupDevices(devices, containerId) {
             `;
         }).join('');
     } else {
+        // Empty Devices State
         deviceCards = `
             <div class="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-2xl h-full min-h-[100px]">
-                <p class="text-slate-400 text-sm font-medium">No devices yet.</p>
+                <span class="material-symbols-outlined text-slate-300 dark:text-slate-600 text-3xl mb-2">devices</span>
+                <p class="text-slate-400 dark:text-slate-500 text-sm font-medium">No devices in this group yet.</p>
             </div>
         `;
     }
@@ -220,26 +237,12 @@ function renderGroupDevices(devices, containerId) {
 function selectGroup(groupId) {
     selectedGroupId = groupId;
 
-    document.querySelectorAll('.group-item').forEach(item => {
-        const h4 = item.querySelector('h4');
-        item.classList.remove('active');
-        if (h4) {
-            h4.classList.remove('text-slate-900', 'dark:text-white');
-            h4.classList.add('text-slate-700', 'dark:text-slate-300');
-        }
-    });
-
-    const selectedItem = document.querySelector(`[data-group-id="${groupId}"]`);
-    if (selectedItem) {
-        selectedItem.classList.add('active');
-        const h4 = selectedItem.querySelector('h4');
-        if (h4) {
-            h4.classList.remove('text-slate-700', 'dark:text-slate-300');
-            h4.classList.add('text-slate-900', 'dark:text-white');
-        }
-    }
-
+    // UPDATE: Render ulang list untuk apply class active/inactive
     const groups = loadGroupsFromStorage();
+    const searchInput = document.getElementById('group-search');
+    renderGroups(groups, 'group-list', searchInput ? searchInput.value : "");
+
+    // Logic detail view
     const group = groups.find(g => g.id === groupId);
     if (!group) return;
 
@@ -262,7 +265,8 @@ function showGroupDetail() {
         detail.classList.remove('hidden');
         detail.classList.add('flex');
     }
-    if (groupList) {
+    // Responsive logic
+    if (groupList && window.innerWidth >= 1024) {
         groupList.classList.remove('lg:flex-1');
         groupList.classList.add('lg:w-96', 'lg:flex-shrink-0');
     }
@@ -282,24 +286,19 @@ function hideGroupDetail() {
     }
 
     selectedGroupId = null;
-    document.querySelectorAll('.group-item').forEach(item => {
-        item.classList.remove('active');
-        const h4 = item.querySelector('h4');
-        if (h4) {
-            h4.classList.remove('text-slate-900', 'dark:text-white');
-            h4.classList.add('text-slate-700', 'dark:text-slate-300');
-        }
-    });
+
+    // Refresh visual selection
+    const groups = loadGroupsFromStorage();
+    renderGroups(groups, 'group-list');
 }
 
 // --- ADD DEVICE LOGIC ---
 
-let tempAvailableDeviceMap = {};
+var tempAvailableDeviceMap = {};
 
 function triggerAddDeviceToGroup() {
     if (!selectedGroupId) return;
 
-    // FIX THEME: Modal Structure now uses Theme Colors
     document.getElementById('add-device-to-group-modal').classList.remove('hidden');
     window.devicesToAddSet = new Set();
 
@@ -330,24 +329,26 @@ function refreshAddDeviceList() {
     if (availableToAdd.length === 0) {
         listContainer.innerHTML = `
             <div class="text-center py-8">
-                <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">wifi_off</span>
-                <p class="text-slate-500 text-sm">No new online devices found.</p>
+                <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">wifi_off</span>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">No new online devices found.</p>
             </div>
         `;
     } else {
         listContainer.innerHTML = availableToAdd.map(d => {
             const isSelected = window.devicesToAddSet && window.devicesToAddSet.has(d.id);
-            const activeClass = isSelected ? 'border-primary bg-primary/5' : 'border-transparent';
-            const checkClass = isSelected ? 'bg-primary border-primary' : 'border-slate-300';
+
+            // Tailwind Selection Logic
+            const activeClass = isSelected ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-transparent';
+            const checkClass = isSelected ? 'bg-primary border-primary' : 'border-slate-300 dark:border-slate-600';
             const iconOpacity = isSelected ? '' : 'opacity-0';
 
             return `
-                <div onclick="toggleAddDeviceSelection('${d.id}')" class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-all border ${activeClass}" id="add-dev-${d.id}">
+                <div onclick="toggleAddDeviceSelection('${d.id}')" class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-all border-2 ${activeClass}" id="add-dev-${d.id}">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined text-slate-500">computer</span>
                         <span class="font-bold text-slate-700 dark:text-slate-200 text-sm truncate max-w-[180px]">${d.name}</span>
                     </div>
-                    <div class="w-5 h-5 rounded-full border-2 ${checkClass} flex items-center justify-center checkbox-indicator transition-colors">
+                    <div class="w-5 h-5 rounded-full border-2 ${checkClass} flex items-center justify-center transition-colors">
                         <span class="material-symbols-outlined text-xs text-white ${iconOpacity}">check</span>
                     </div>
                 </div>
@@ -403,9 +404,9 @@ window.closeAddDeviceToGroupModal = function () {
     if (window.addDeviceInterval) clearInterval(window.addDeviceInterval);
 };
 
-// --- REMOVE DEVICE & GROUP LOGIC (CUSTOM MODAL FIX) ---
+// --- REMOVE DEVICE & GROUP LOGIC ---
 
-// 1. Helper: Tampilkan Modal Delete (Reusable)
+// 1. Helper: Tampilkan Modal Delete (Reusable + Tailwind Refactor)
 function showDeleteModal(titleText, messageText, onConfirm) {
     let modal = document.getElementById('delete-group-modal');
 
@@ -415,9 +416,9 @@ function showDeleteModal(titleText, messageText, onConfirm) {
         modal.id = 'delete-group-modal';
         modal.className = 'fixed inset-0 z-[100] flex items-center justify-center hidden';
 
-        // Modal HTML dengan Dark Mode & Animasi
+        // Modal HTML dengan Dark Mode & Animasi Tailwind
         modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDeleteGroupModal()"></div>
+            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeDeleteGroupModal()"></div>
             <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl z-10 text-center transition-all scale-95 opacity-0 transform" id="delete-modal-content">
                 <div class="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span class="material-symbols-outlined text-3xl text-red-500">delete_forever</span>
@@ -519,6 +520,8 @@ function confirmDeleteGroup() {
     if (!selectedGroupId) return;
     deleteGroupFromStorage(selectedGroupId);
     hideGroupDetail();
+
+    // Refresh List
     const groups = loadGroupsFromStorage();
     renderGroups(groups, 'group-list');
 
@@ -527,7 +530,7 @@ function confirmDeleteGroup() {
 }
 
 // ==========================================
-// CRUD GROUP MODALS
+// CRUD GROUP MODALS (Full Tailwind)
 // ==========================================
 
 function openAddGroupModal() {
@@ -538,8 +541,8 @@ function openAddGroupModal() {
         modal.className = 'fixed inset-0 z-[100] flex items-center justify-center hidden';
 
         modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeAddGroupModal()"></div>
-            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl z-10 transition-colors">
+            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeAddGroupModal()"></div>
+            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl z-10 transition-colors transform scale-100">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-xl font-bold text-slate-900 dark:text-white">Create New Group</h3>
                     <button class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-all" onclick="closeAddGroupModal()">
@@ -550,16 +553,16 @@ function openAddGroupModal() {
                     <div>
                         <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Group Name</label>
                         <input type="text" id="add-group-name-input" placeholder="e.g. Work Team" 
-                            class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
+                            class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
                     </div>
                     <div>
                         <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Description (optional)</label>
                         <input type="text" id="add-group-desc-input" placeholder="e.g. Devices for project X" 
-                            class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
+                            class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
                     </div>
                 </div>
                 <div class="flex gap-3 mt-6">
-                    <button class="flex-1 py-3 rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-all" onclick="closeAddGroupModal()">Cancel</button>
+                    <button class="flex-1 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-all" onclick="closeAddGroupModal()">Cancel</button>
                     <button class="flex-1 py-3 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:brightness-105 active:scale-[0.99] transition-all" onclick="confirmAddGroup()">Create Group</button>
                 </div>
             </div>
@@ -629,8 +632,8 @@ function openEditGroupModal() {
         modal.className = 'fixed inset-0 z-[100] flex items-center justify-center hidden';
 
         modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeEditGroupModal()"></div>
-            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl z-10 transition-colors">
+            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeEditGroupModal()"></div>
+            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl z-10 transition-colors transform scale-100">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-xl font-bold text-slate-900 dark:text-white">Edit Group</h3>
                     <button class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-all" onclick="closeEditGroupModal()">
@@ -640,11 +643,11 @@ function openEditGroupModal() {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Group Name</label>
-                        <input type="text" id="edit-group-name-input" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
+                        <input type="text" id="edit-group-name-input" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
                     </div>
                     <div>
                         <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Description</label>
-                        <input type="text" id="edit-group-desc-input" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
+                        <input type="text" id="edit-group-desc-input" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"/>
                     </div>
                 </div>
                 <div class="flex gap-3 mt-6">
@@ -699,7 +702,7 @@ function confirmEditGroup() {
         return;
     }
 
-    updateGroupInStorage(selectedGroupId, {name: name, description: desc});
+    updateGroupInStorage(selectedGroupId, { name: name, description: desc });
 
     document.getElementById('group-name').textContent = name;
     document.getElementById('group-description').textContent = desc || 'No description';
@@ -748,8 +751,8 @@ function showGroupFileUploadModal(group) {
         modal.id = 'group-file-upload-modal';
         modal.className = 'fixed inset-0 z-[100] flex items-center justify-center';
         modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeGroupFileUploadModal()"></div>
-            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl z-10">
+            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeGroupFileUploadModal()"></div>
+            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl z-10 transition-colors">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-xl font-bold text-slate-900 dark:text-white">Send Files to Group</h3>
                     <button class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all" onclick="closeGroupFileUploadModal()">
@@ -893,7 +896,7 @@ function initGroupsPage() {
     });
 }
 
-window.getOnlineDevicesNotInList = function(existingIds) {
+window.getOnlineDevicesNotInList = function (existingIds) {
     const existingSet = new Set(existingIds);
     // Filter: Harus Online DAN Belum ada di grup ini
     return window.currentDevices.filter(d => !existingSet.has(d.id));

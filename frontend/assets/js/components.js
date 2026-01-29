@@ -1,7 +1,7 @@
 // ==========================================
 // Global State
 // ==========================================
-let currentDevices = [];
+window.currentDevices = window.currentDevices || [];
 const DEVICES_PER_PAGE = 6;
 let currentPage = 1;
 
@@ -10,22 +10,17 @@ let currentPage = 1;
 // ==========================================
 
 function updateDeviceListFromBackend(backendUsers) {
-
     if (!backendUsers || !Array.isArray(backendUsers)) {
-        console.warn('Invalid device list from backend', backendUsers);
         return;
     }
 
     const myPublicKey = localStorage.getItem('gdrop_public_key');
 
     // Simpan state checked biar gak ilang pas refresh polling
-    const checkedIds = new Set(currentDevices.filter(d => d.checked).map(d => d.id));
+    const checkedIds = new Set(window.currentDevices.filter(d => d.checked).map(d => d.id));
 
-    currentDevices = backendUsers
-        .filter(item => {
-            // Filter diri sendiri
-            return item.user && item.user.public_key !== myPublicKey;
-        })
+    window.currentDevices = backendUsers
+        .filter(item => item.user && item.user.public_key !== myPublicKey)
         .map((item) => {
             const userId = item.user.public_key;
             return {
@@ -33,12 +28,12 @@ function updateDeviceListFromBackend(backendUsers) {
                 name: item.user.username || 'Unknown Device',
                 icon: 'computer',
                 status: 'Connected',
-                checked: checkedIds.has(userId) // Restore checked state
+                checked: checkedIds.has(userId)
             };
         });
 
     // Handle Pagination Reset
-    const totalPages = Math.ceil(currentDevices.length / DEVICES_PER_PAGE);
+    const totalPages = Math.ceil(window.currentDevices.length / DEVICES_PER_PAGE);
     if (currentPage > totalPages && totalPages > 0) {
         currentPage = 1;
     } else if (currentPage === 0 && totalPages > 0) {
@@ -49,31 +44,46 @@ function updateDeviceListFromBackend(backendUsers) {
 }
 
 // ==========================================
-// UI Rendering
+// UI Rendering (FULL TAILWIND REFACTOR)
 // ==========================================
 
 function createDeviceCard(device) {
-    const statusClass = 'bg-green-500'; // Selalu hijau karena yang dapet dari WS pasti online
-    const selectedClass = device.checked ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/50';
-    const checkClass = device.checked ? 'bg-primary text-white border-primary' : 'bg-transparent border-2 border-slate-300 text-transparent';
+    // Styling Dynamic (Selected vs Unselected)
+    const containerBase = "relative p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 group hover:shadow-lg hover:shadow-primary/5";
+
+    const containerStyle = device.checked
+        ? "bg-primary/5 border-primary dark:bg-primary/10"
+        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary/50 dark:hover:border-primary/50";
+
+    const checkboxBase = "w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-colors duration-200";
+
+    const checkboxStyle = device.checked
+        ? "bg-primary border-primary text-white"
+        : "border-slate-300 dark:border-slate-600 text-transparent group-hover:border-primary/50";
+
+    const iconBase = "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl transition-colors";
+    const iconStyle = device.checked
+        ? "bg-white text-primary shadow-sm"
+        : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
 
     return `
-        <div class="device-card bg-white p-4 rounded-2xl flex items-center gap-4 cursor-pointer border-2 ${selectedClass} transition-all shadow-sm hover:shadow-md" 
-             onclick="toggleDeviceSelection('${device.id}')">
-            
-            <div class="w-6 h-6 rounded-lg ${checkClass} flex items-center justify-center flex-shrink-0 transition-all">
-                <span class="material-symbols-outlined text-sm">check</span>
-            </div>
-            
-            <div class="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-500">
-                <span class="material-symbols-outlined text-2xl">${device.icon}</span>
-            </div>
-            
-            <div class="flex-1 min-w-0">
-                <p class="font-bold text-slate-800 truncate">${device.name}</p>
-                <div class="flex items-center gap-2 mt-0.5">
-                    <span class="w-2 h-2 rounded-full ${statusClass} animate-pulse"></span>
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Online</span>
+        <div class="${containerBase} ${containerStyle}" onclick="toggleDeviceSelection('${device.id}')">
+            <div class="flex items-center gap-4">
+                <div class="${checkboxBase} ${checkboxStyle}">
+                    <span class="material-symbols-outlined text-sm font-bold">check</span>
+                </div>
+                <div class="${iconBase} ${iconStyle}">
+                    <span class="material-symbols-outlined">${device.icon}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="font-bold text-slate-800 dark:text-white truncate text-sm lg:text-base">${device.name}</p>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="relative flex h-2 w-2">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Online</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -85,31 +95,33 @@ function renderDevicesWithPagination() {
     if (!container) return;
 
     // Empty State
-    if (currentDevices.length === 0) {
+    if (window.currentDevices.length === 0) {
         container.innerHTML = `
-            <div class="col-span-full py-16 flex flex-col items-center justify-center text-center">
-                <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 relative">
-                    <span class="material-symbols-outlined text-4xl text-slate-300">radar</span>
-                    <div class="absolute inset-0 rounded-full border-2 border-slate-100 animate-ping"></div>
+            <div class="col-span-full py-20 flex flex-col items-center justify-center text-center">
+                <div class="w-24 h-24 bg-slate-50 dark:bg-slate-800/50 rounded-full flex items-center justify-center mb-6 relative group">
+                    <span class="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600 group-hover:text-primary/50 transition-colors">radar</span>
+                    <div class="absolute inset-0 rounded-full border-2 border-slate-100 dark:border-slate-700 animate-ping opacity-20"></div>
                 </div>
-                <h3 class="text-slate-900 font-bold text-lg">Scanning for devices...</h3>
-                <p class="text-slate-500 text-sm mt-1">Ensure other devices are on the same network.</p>
+                <h3 class="text-slate-900 dark:text-white font-bold text-lg">Scanning for devices...</h3>
+                <p class="text-slate-500 dark:text-slate-400 text-sm mt-2 max-w-xs mx-auto">
+                    Ensure other devices are on the same network and have GopherDrop open.
+                </p>
             </div>
         `;
-        renderPagination(); // Clear pagination
+        renderPagination();
         const countEl = document.getElementById('device-count');
-        if(countEl) countEl.textContent = '0 FOUND';
+        if (countEl) countEl.textContent = '0 FOUND';
         return;
     }
 
     const startIndex = (currentPage - 1) * DEVICES_PER_PAGE;
-    const paginatedDevices = currentDevices.slice(startIndex, startIndex + DEVICES_PER_PAGE);
+    const paginatedDevices = window.currentDevices.slice(startIndex, startIndex + DEVICES_PER_PAGE);
 
     container.innerHTML = paginatedDevices.map(device => createDeviceCard(device)).join('');
 
     // Update Counter
     const countEl = document.getElementById('device-count');
-    if (countEl) countEl.textContent = `${currentDevices.length} FOUND`;
+    if (countEl) countEl.textContent = `${window.currentDevices.length} FOUND`;
 
     renderPagination();
 }
@@ -118,20 +130,29 @@ function renderPagination() {
     const container = document.getElementById('pagination');
     if (!container) return;
 
-    const totalPages = Math.ceil(currentDevices.length / DEVICES_PER_PAGE);
+    const totalPages = Math.ceil(window.currentDevices.length / DEVICES_PER_PAGE);
 
     if (totalPages <= 1) {
         container.innerHTML = '';
         return;
     }
 
+    const btnBase = "w-10 h-10 rounded-xl flex items-center justify-center border transition-all duration-200";
+    const btnActive = "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-primary hover:text-primary shadow-sm";
+    const btnDisabled = "bg-slate-50 dark:bg-slate-900 border-transparent text-slate-300 dark:text-slate-700 cursor-not-allowed";
+
+    const prevClass = currentPage === 1 ? btnDisabled : btnActive;
+    const nextClass = currentPage === totalPages ? btnDisabled : btnActive;
+
     let html = `
-        <button class="w-10 h-10 rounded-lg flex items-center justify-center border border-slate-200 hover:bg-slate-50 disabled:opacity-50" 
+        <button class="${btnBase} ${prevClass}" 
                 onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
             <span class="material-symbols-outlined text-sm">chevron_left</span>
         </button>
-        <span class="text-sm font-bold text-slate-500 px-2">Page ${currentPage} / ${totalPages}</span>
-        <button class="w-10 h-10 rounded-lg flex items-center justify-center border border-slate-200 hover:bg-slate-50 disabled:opacity-50" 
+        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider px-4">
+            Page ${currentPage} / ${totalPages}
+        </span>
+        <button class="${btnBase} ${nextClass}" 
                 onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
             <span class="material-symbols-outlined text-sm">chevron_right</span>
         </button>
@@ -146,7 +167,7 @@ function goToPage(page) {
 }
 
 function toggleDeviceSelection(deviceId) {
-    const device = currentDevices.find(d => d.id === deviceId);
+    const device = window.currentDevices.find(d => d.id === deviceId);
     if (device) {
         device.checked = !device.checked;
         renderDevicesWithPagination();
@@ -154,32 +175,61 @@ function toggleDeviceSelection(deviceId) {
 }
 
 function getSelectedDevices() {
-    return currentDevices.filter(d => d.checked);
+    return window.currentDevices.filter(d => d.checked);
 }
 
 // ==========================================
-// Modal & Group Logic (Legacy Support)
+// Modal & Group Logic
 // ==========================================
 
 function openCreateGroupModal() {
     const selected = getSelectedDevices();
     if (selected.length === 0) {
-        if(window.showToast) window.showToast('Select a device first!', 'warning');
+        if (window.showToast) window.showToast('Select a device first!', 'warning');
         return;
     }
 
     const container = document.getElementById('selected-devices-list');
-    if(container) {
-        container.innerHTML = selected.map(d => `
-            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg mb-2">
-                <span class="font-bold text-sm text-slate-700">${d.name}</span>
+    if (container) {
+        let html = selected.map(d => `
+            <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl mb-2 border border-slate-100 dark:border-slate-700">
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-slate-400">computer</span>
+                    <span class="font-bold text-sm text-slate-700 dark:text-slate-200">${d.name}</span>
+                </div>
                 <span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
             </div>
         `).join('');
+
+        // Add existing groups section if any exist
+        const existingGroups = window.loadGroupsFromStorage ? window.loadGroupsFromStorage() : [];
+        if (existingGroups.length > 0) {
+            html += `
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Or Send to Existing Group</label>
+                    <div class="space-y-2">
+                        ${existingGroups.map(g => `
+                            <button onclick="sendToExistingGroup('${g.id}')" class="w-full flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-primary hover:bg-primary/5 transition-all group">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-primary">group</span>
+                                    <div class="text-left">
+                                        <span class="font-bold text-sm text-slate-700 dark:text-white block">${g.name}</span>
+                                        <span class="text-[10px] text-slate-400">${g.devices ? g.devices.length : 0} members</span>
+                                    </div>
+                                </div>
+                                <span class="material-symbols-outlined text-slate-300 group-hover:text-primary">arrow_forward</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
     }
 
     const countEl = document.getElementById('selected-count-modal');
-    if(countEl) countEl.textContent = `(${selected.length})`;
+    if (countEl) countEl.textContent = `(${selected.length})`;
 
     document.getElementById('create-group-modal').classList.remove('hidden');
 }
@@ -188,89 +238,289 @@ function closeCreateGroupModal() {
     document.getElementById('create-group-modal').classList.add('hidden');
 }
 
-function confirmCreateGroup() {
-    // Logic Create Transaction disini nanti
-    const name = document.getElementById('new-group-name').value;
-    if(!name) {
-        if(window.showToast) window.showToast('Enter group name', 'error');
+// Send selected devices to an existing group
+function sendToExistingGroup(groupId) {
+    const selectedDevices = getSelectedDevices();
+    if (selectedDevices.length === 0) return;
+
+    // Get the group
+    const groups = window.loadGroupsFromStorage ? window.loadGroupsFromStorage() : [];
+    const group = groups.find(g => g.id === groupId);
+    if (!group) {
+        if (window.showToast) window.showToast('Group not found', 'error');
         return;
     }
 
+    // Check if files are selected
+    const filesData = sessionStorage.getItem('gdrop_transfer_files');
+    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+
+    if (!hasFiles) {
+        // Show file upload prompt
+        showFileUploadPrompt(() => {
+            // Continue with sending after files selected
+            proceedWithSendToExistingGroup(groupId, group, selectedDevices);
+        });
+        return;
+    }
+
+    proceedWithSendToExistingGroup(groupId, group, selectedDevices);
+}
+
+function proceedWithSendToExistingGroup(groupId, group, selectedDevices) {
+    const sendBtn = document.getElementById('send-direct-btn');
+
+    if (sendBtn && sendBtn.disabled) return;
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+    }
+
+    if (window.resetTransferState) window.resetTransferState(false);
+    // Add devices to group (avoid duplicates)
+    const existingIds = new Set((group.devices || []).map(d => d.id));
+    const newDevices = selectedDevices
+        .filter(d => !existingIds.has(d.id))
+        .map(d => ({
+            id: d.id,
+            name: d.name,
+            icon: d.icon || 'computer',
+            status: 'Saved'
+        }));
+
+    if (newDevices.length > 0 && window.updateGroupInStorage) {
+        group.devices = [...(group.devices || []), ...newDevices];
+        window.updateGroupInStorage(groupId, { devices: group.devices });
+    }
+
+    // Set session storage for transfer
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
+    sessionStorage.setItem('gdrop_group_name', group.name);
+    sessionStorage.setItem('gdrop_current_group_id', groupId);
+
+    // Start transfer
+    if (window.startTransferProcess) {
+        window.startTransferProcess();
+        closeCreateGroupModal();
+
+        const addedMsg = newDevices.length > 0 ? ` (${newDevices.length} new added to group)` : '';
+        if (window.showToast) window.showToast(`Sending to "${group.name}"${addedMsg}`, 'success');
+    }
+}
+
+function confirmCreateGroup() {
+    const name = document.getElementById('new-group-name').value;
+    if (!name) {
+        if (window.showToast) window.showToast('Enter group name', 'error');
+        return;
+    }
+
+    const selectedDevices = getSelectedDevices();
+
+    // Check if files are selected
+    const filesData = sessionStorage.getItem('gdrop_transfer_files');
+    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+
+    if (!hasFiles) {
+        // Show file upload prompt
+        showFileUploadPrompt(() => {
+            // Callback after file upload - continue with group creation
+            proceedWithGroupCreation(name, selectedDevices);
+        });
+        return;
+    }
+
+    proceedWithGroupCreation(name, selectedDevices);
+}
+
+function proceedWithGroupCreation(name, selectedDevices) {
+    const sendBtn = document.getElementById('send-direct-btn');
+
+    if (sendBtn && sendBtn.disabled) return;
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+    }
+
+    if (window.resetTransferState) window.resetTransferState(false);
     // Simpan ke Session Storage buat dikirim via WS app.js
-    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(getSelectedDevices()));
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
     sessionStorage.setItem('gdrop_group_name', name);
 
-    if(window.startTransferProcess) {
-        window.startTransferProcess(); // Panggil fungsi di app.js
-        closeCreateGroupModal();
-        if(window.showToast) window.showToast('Group Created! Waiting for accept...', 'success');
+    let groupId = null;
+    if (window.addGroupToStorage && window.generateGroupId) {
+        groupId = window.generateGroupId();
+        const newGroup = {
+            id: groupId,
+            name: name,
+            description: `No Description`,
+            devices: selectedDevices.map(d => ({
+                id: d.id,
+                name: d.name,
+                icon: d.icon || 'computer',
+                status: 'Saved'
+            })),
+            createdAt: new Date().toISOString()
+        };
+        window.addGroupToStorage(newGroup);
+        sessionStorage.setItem('gdrop_current_group_id', groupId);
     }
+    // ================================================
+
+    if (window.startTransferProcess) {
+        window.startTransferProcess();
+        closeCreateGroupModal();
+        if (window.showToast) window.showToast('Group Created & Saved! Waiting for accept...', 'success');
+    }
+}
+
+// Show file upload prompt modal
+function showFileUploadPrompt(onFilesSelected) {
+    let modal = document.getElementById('file-upload-prompt-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'file-upload-prompt-modal';
+        modal.className = 'fixed inset-0 z-[110] flex items-center justify-center hidden';
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeFileUploadPrompt()"></div>
+            <div class="relative bg-white dark:bg-slate-800 rounded-3xl p-8 w-full max-w-md mx-4 shadow-2xl z-10 transform scale-100 transition-all">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white">No Files Selected</h3>
+                    <button class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 transition-all" onclick="closeFileUploadPrompt()">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div class="text-center py-4">
+                    <div class="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <span class="material-symbols-outlined text-4xl text-primary">upload_file</span>
+                    </div>
+                    <p class="text-slate-600 dark:text-slate-300 mb-8 leading-relaxed">
+                        You selected devices but haven't picked any files yet. Please select files to proceed.
+                    </p>
+                    <input type="file" id="prompt-file-input" multiple class="hidden" />
+                    
+                    <div class="flex flex-col gap-3">
+                        <button onclick="triggerPromptFileSelect()" class="w-full py-4 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:brightness-105 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined">folder_open</span>
+                            Select Files
+                        </button>
+                        <button onclick="closeFileUploadPrompt()" class="w-full py-4 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // Store callback
+    window._fileUploadCallback = onFilesSelected;
+
+    // Setup file input listener
+    const fileInput = document.getElementById('prompt-file-input');
+    // Clear old listeners via clone
+    const newFileInput = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(newFileInput, fileInput);
+
+    newFileInput.onchange = (e) => {
+        if (e.target.files.length > 0) {
+            if (window.handleFilesSelected) {
+                window.handleFilesSelected(e.target.files);
+            }
+            closeFileUploadPrompt();
+            if (window._fileUploadCallback) {
+                window._fileUploadCallback();
+                window._fileUploadCallback = null;
+            }
+        }
+    };
+
+    modal.classList.remove('hidden');
+}
+
+function closeFileUploadPrompt() {
+    const modal = document.getElementById('file-upload-prompt-modal');
+    if (modal) modal.classList.add('hidden');
+    window._fileUploadCallback = null;
+}
+
+function triggerPromptFileSelect() {
+    document.getElementById('prompt-file-input').click();
 }
 
 // ==========================================
 // Toast Notification
 // ==========================================
 
+let toastTimeoutId;
+
 function showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
-    const MAX_TOASTS = 1;
 
+    // Create some New Container if not exists
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
-        container.className = 'fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center';
+        // Styling container (Fixed position top-center)
+        container.className = 'fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center w-full max-w-sm pointer-events-none gap-2';
         document.body.appendChild(container);
     }
 
-    // Hapus toast lama jika kebanyakan
-    while (container.childElementCount >= MAX_TOASTS) {
-        container.firstChild.remove();
-    }
+    // Delete the Previous Toast and replace with new one
+    container.innerHTML = '';
+    if (toastTimeoutId) clearTimeout(toastTimeoutId);
 
+    // Create Toast Element
     const toast = document.createElement('div');
 
-    // Config warna icon & border
-    let icon = 'info';
-    let colorClass = 'border-blue-500 bg-white text-slate-800'; // Default info
+    // Config Color
+    const configs = {
+        success: { icon: 'check_circle', bg: 'bg-white dark:bg-slate-800', border: 'border-green-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-green-500' },
+        error: { icon: 'error', bg: 'bg-white dark:bg-slate-800', border: 'border-red-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-red-500' },
+        warning: { icon: 'warning', bg: 'bg-white dark:bg-slate-800', border: 'border-yellow-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-yellow-500' },
+        info: { icon: 'info', bg: 'bg-white dark:bg-slate-800', border: 'border-blue-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-blue-500' }
+    };
 
-    if (type === 'success') {
-        icon = 'check_circle';
-        colorClass = 'border-green-500 bg-white text-slate-800';
-    } else if (type === 'error') {
-        icon = 'error';
-        colorClass = 'border-red-500 bg-white text-slate-800';
-    } else if (type === 'warning') {
-        icon = 'warning';
-        colorClass = 'border-yellow-500 bg-white text-slate-800';
-    }
+    const cfg = configs[type] || configs.info;
 
-    toast.className = `flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl border-l-4 transform transition-all duration-500 -translate-y-full opacity-0 pointer-events-auto min-w-[300px] max-w-sm ${colorClass}`;
+    // Add some styling and content
+    toast.className = `pointer-events-auto flex items-center gap-4 px-5 py-4 rounded-2xl shadow-xl border-l-4 ${cfg.border} ${cfg.bg} transform transition-all duration-500 -translate-y-10 opacity-0 min-w-[320px]`;
 
     toast.innerHTML = `
-        <span class="material-symbols-outlined text-2xl">${icon}</span>
+        <span class="material-symbols-outlined text-2xl ${cfg.iconColor}">${cfg.icon}</span>
         <div class="flex flex-col flex-1">
-            <span class="font-bold text-xs uppercase tracking-wider opacity-70">${type}</span>
-            <span class="font-bold text-sm">${message}</span>
+            <span class="font-bold text-[10px] uppercase tracking-wider opacity-60 ${cfg.text}">${type}</span>
+            <span class="font-bold text-sm ${cfg.text}">${message}</span>
         </div>
-        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-full transition-colors">
+        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded-full transition-colors">
             <span class="material-symbols-outlined text-lg">close</span>
         </button>
     `;
 
+    // Append to container
     container.appendChild(toast);
 
-    // Animasi Masuk
+    // Animate In
     requestAnimationFrame(() => {
         toast.classList.remove('-translate-y-full', 'opacity-0');
         toast.classList.add('translate-y-0', 'opacity-100');
     });
 
-    // Auto Hapus
-    setTimeout(() => {
-        if (toast.parentElement) {
+    // Timer to auto-remove
+    toastTimeoutId = setTimeout(() => {
+        if (toast) {
+            // Animate Out
             toast.classList.remove('translate-y-0', 'opacity-100');
             toast.classList.add('-translate-y-full', 'opacity-0');
-            setTimeout(() => toast.remove(), 500);
+
+            // Delete after animation
+            setTimeout(() => {
+                // Check if still in DOM
+                if (toast.parentElement) toast.remove();
+            }, 500);
         }
     }, 4000);
 }
@@ -286,24 +536,24 @@ function showIncomingModal(senderName, files) {
     // 1. Update Nama & Jumlah
     document.getElementById('incoming-sender').textContent = senderName;
     const countEl = document.getElementById('incoming-file-count');
-    if(countEl) countEl.textContent = `${files.length} ITEMS`;
+    if (countEl) countEl.textContent = `${files.length} ITEMS`;
 
     // 2. Render List File (Miro Style)
     const listContainer = document.getElementById('incoming-file-list');
     if (listContainer) {
         if (!files || files.length === 0) {
-            listContainer.innerHTML = `<p class="text-slate-400 text-center py-4">No metadata available</p>`;
+            listContainer.innerHTML = `<p class="text-slate-400 dark:text-slate-500 text-center py-4 text-sm">No metadata available</p>`;
         } else {
             // Di dalam function showIncomingModal(senderName, files)
             listContainer.innerHTML = files.map(file => `
-                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 hover:border-primary/30 transition-colors">
+                <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-2xl border border-slate-100 dark:border-slate-700">
                     <div class="flex items-center gap-3 min-w-0">
-                        <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-primary shadow-sm">
+                        <div class="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center text-primary shadow-sm border border-slate-100 dark:border-slate-700">
                             <span class="material-symbols-outlined text-xl">${getFileIcon(file.type || '')}</span>
                         </div>
                         <div class="flex flex-col min-w-0">
-                            <span class="text-xs font-bold text-slate-700 truncate pr-2">${file.name}</span>
-                            <span class="text-[9px] text-slate-400 font-black uppercase tracking-wider">${formatFileSize(file.size)}</span>
+                            <span class="text-xs font-bold text-slate-700 dark:text-slate-200 truncate pr-2">${file.name}</span>
+                            <span class="text-[9px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-wider">${formatFileSize(file.size)}</span>
                         </div>
                     </div>
                     <span class="material-symbols-outlined text-blue-400 text-sm">check_circle</span>
@@ -349,37 +599,35 @@ async function loadTransferProgressView() {
     if (overlay) return overlay;
 
     try {
-        console.log("[UI] Loading transfer progress view...");
         const response = await fetch('pages/transfer-progress.html');
         if (!response.ok) throw new Error("Failed to load transfer page");
-        
+
         const html = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        
+
         // Extract content from body
         const nav = doc.querySelector('nav');
         const main = doc.querySelector('main');
-        
+
         if (!nav || !main) throw new Error("Invalid page structure");
 
         // Create overlay container
         overlay = document.createElement('div');
         overlay.id = 'transfer-progress-overlay';
         overlay.className = 'fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-900 flex flex-col transition-all duration-300 font-sans';
-        
+
         // Inject content
         overlay.appendChild(nav.cloneNode(true));
         overlay.appendChild(main.cloneNode(true));
-        
+
         document.body.appendChild(overlay);
-        
+
         // Alias cancelTransfer for compatibility
         window.cancelTransfer = window.endTransferSession;
-        
+
         return overlay;
     } catch (e) {
-        console.error("[UI] Error loading transfer view:", e);
         return null;
     }
 }
@@ -403,38 +651,38 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
 
     // --- LOGIC RESET UNTUK TOP BAR (Biar gak dianggurin) ---
     const overallText = document.getElementById('overall-percentage');
-    if(overallText) overallText.textContent = "0%";
+    if (overallText) overallText.textContent = "0%";
     const mainBar = document.getElementById('main-progress-bar');
-    if(mainBar) mainBar.style.width = "0%";
+    if (mainBar) mainBar.style.width = "0%";
     // -------------------------------------------------------
 
     // 2. Update Text Header & Save Device Name
-    const peerName = (!isReceiver && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))) 
-        ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')) 
+    const peerName = (!isReceiver && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')))
+        ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))
         : (isReceiver ? (window.senderDeviceName || "Sender") : "Device"); // Use sender name for receiver
-    
+
     window.peerDeviceName = peerName; // Save for completion screen
 
     const actionText = isReceiver ? "Receiving" : "Sending";
     const subText = isReceiver ? "Receiving from" : "Transferring to";
-    
+
     // Update specific text spans (Adaptive UI)
     const actionTextEl = overlay.querySelector('#transfer-action-text');
     const directionTextEl = overlay.querySelector('#transfer-direction-text');
     const recipientCountEl = overlay.querySelector('#recipient-count');
-    
+
     if (actionTextEl) actionTextEl.textContent = actionText;
     if (directionTextEl) directionTextEl.textContent = subText;
-    
+
     // For Sender: Display Target Name. For Receiver: Display Count or Sender Name if avail.
     if (recipientCountEl) {
-        if(!isReceiver && peerName && peerName !== "Device") {
+        if (!isReceiver && peerName && peerName !== "Device") {
             recipientCountEl.textContent = peerName;
         } else {
-             recipientCountEl.textContent = `${deviceCount || 1} devices`;
+            recipientCountEl.textContent = `${deviceCount || 1} devices`;
         }
     }
-    
+
     // Update numeric values
     const badgeEl = overlay.querySelector('#total-items-badge');
     if (badgeEl) badgeEl.textContent = `${files.length} files`;
@@ -444,9 +692,9 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
     if (queueContainer) {
         queueContainer.innerHTML = files.map(file => {
             let icon = 'draft';
-            let color = 'text-slate-400 bg-slate-50';
-            if (file.type && file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50'; }
-            else if (file.type && file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50'; }
+            let color = 'text-slate-400 bg-slate-100 dark:bg-slate-700/50';
+            if (file.type && file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50 dark:bg-blue-900/20'; }
+            else if (file.type && file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50 dark:bg-red-900/20'; }
 
             const safeID = file.name.replace(/[^a-zA-Z0-9]/g, '');
             return `
@@ -478,7 +726,7 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
 // Fungsi Pembantu Render Mesh
 function renderMeshNetwork(count) {
     const container = document.getElementById('mesh-network-view');
-    if(!container) return;
+    if (!container) return;
 
     // Hapus satelit lama (sisakan center node)
     const oldNodes = container.querySelectorAll('.mesh-node, .connection-line');
@@ -509,9 +757,9 @@ function renderMeshNetwork(count) {
         node.style.left = `50%`;
         node.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
 
-        const peerName = (count === 1 && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))) 
-            ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')) 
-            : `Device ${i+1}`;
+        const peerName = (count === 1 && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')))
+            ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))
+            : `Device ${i + 1}`;
 
         node.innerHTML = `
             <div class="w-16 h-16 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 flex items-center justify-center mb-2 animate-bounce" style="animation-delay: ${i * 0.2}s">
@@ -524,7 +772,7 @@ function renderMeshNetwork(count) {
     }
 }
 
-window.updateFileProgressUI = function(fileName, percentage) {
+window.updateFileProgressUI = function (fileName, percentage) {
     const safeName = fileName.replace(/[^a-zA-Z0-9]/g, '');
 
     // 1. Update Card File Satuan (Bagian Bawah)
@@ -570,32 +818,12 @@ window.updateFileProgressUI = function(fileName, percentage) {
     }
 };
 
-// function endTransferSession() {
-//     const overlay = document.getElementById('transfer-progress-overlay');
-//     if (overlay) {
-//         overlay.classList.add('hidden');
-//         overlay.classList.remove('flex');
-//     }
-//     // Refresh page untuk reset koneksi (bersih-bersih)
-//     window.location.reload();
-// }
-
 function endTransferSession() {
-    // Clear saved files from IndexedDB since transfer is complete/cancelled
-    if (window.clearFilesFromDB) {
-        window.clearFilesFromDB().then(() => {
-            console.log("[UI] Cleared saved files from IndexedDB");
-        }).catch(err => {
-            console.error("[UI] Failed to clear IndexedDB:", err);
-        });
-    }
-    
-    // Panggil fungsi reset di app.js daripada reload halaman
     if (window.resetTransferState) {
         window.resetTransferState();
-        if(window.showToast) window.showToast('Transfer session ended', 'info');
+        if (window.showToast) window.showToast('Transfer session ended', 'info');
     } else {
-        window.location.reload(); // Fallback jika fungsi reset belum ke-load
+        window.location.reload();
     }
 }
 
@@ -605,15 +833,13 @@ function endTransferSession() {
 
 // 1. Global Click Listener (Event Delegation)
 // Menangani klik tombol "Select Files" dengan aman (Anti-Gagal)
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
     if (e.target && (e.target.id === 'select-files-btn' || e.target.closest('#select-files-btn'))) {
-        console.log("[UI] Select Files button clicked.");
 
         let input = document.getElementById('file-upload-input');
 
         // SAFETY NET: Jika input hilang dari DOM (karena re-render), buat baru secara manual
         if (!input) {
-            console.warn("[UI] Input element missing. Creating manually...");
             input = document.createElement('input');
             input.type = 'file';
             input.id = 'file-upload-input';
@@ -622,7 +848,7 @@ document.addEventListener('click', function(e) {
             document.body.appendChild(input);
 
             // Pasang listener khusus untuk input buatan ini
-            input.addEventListener('change', function(evt) {
+            input.addEventListener('change', function (evt) {
                 if (evt.target.files.length > 0) {
                     handleFiles(evt.target.files);
                 }
@@ -634,7 +860,7 @@ document.addEventListener('click', function(e) {
 });
 
 // 2. Global Change Listener (Untuk input bawaan HTML jika ada)
-document.addEventListener('change', function(e) {
+document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'file-upload-input') {
         if (e.target.files.length > 0) {
             handleFiles(e.target.files);
@@ -644,27 +870,25 @@ document.addEventListener('change', function(e) {
 
 // 3. Init Drag & Drop (Polling elemen dinamis)
 function initFileUpload() {
-    console.log("[UI] Initializing Drag & Drop...");
 
     // Cek elemen tiap detik sampai ketemu
     const checkInterval = setInterval(() => {
         const dropZone = document.getElementById('upload-zone');
 
         if (dropZone) {
-            console.log("[UI] Drop Zone found. Listeners attached.");
             clearInterval(checkInterval);
 
             dropZone.ondragover = (e) => {
                 e.preventDefault();
-                dropZone.classList.add('border-primary', 'bg-blue-50');
+                dropZone.classList.add('border-primary', 'bg-blue-50', 'dark:bg-slate-800');
             };
             dropZone.ondragleave = (e) => {
                 e.preventDefault();
-                dropZone.classList.remove('border-primary', 'bg-blue-50');
+                dropZone.classList.remove('border-primary', 'bg-blue-50', 'dark:bg-slate-800');
             };
             dropZone.ondrop = (e) => {
                 e.preventDefault();
-                dropZone.classList.remove('border-primary', 'bg-blue-50');
+                dropZone.classList.remove('border-primary', 'bg-blue-50', 'dark:bg-slate-800');
                 handleFiles(e.dataTransfer.files);
             };
         }
@@ -673,7 +897,6 @@ function initFileUpload() {
 
 // 4. Central File Handler
 function handleFiles(files) {
-    console.log("[UI] Processing files:", files);
 
     // Kirim ke App.js
     if (window.handleFilesSelected) {
@@ -682,63 +905,57 @@ function handleFiles(files) {
         // Save to IndexedDB for persistence
         if (window.saveFilesToDB) {
             window.saveFilesToDB(Array.from(files)).then(() => {
-                console.log("[UI] Files saved to IndexedDB for persistence");
             }).catch(err => {
-                console.error("[UI] Failed to save files to IndexedDB:", err);
             });
         }
 
         // UI Feedback
-        if(window.showToast) window.showToast(`${files.length} files READY to send!`, 'success');
+        if (window.showToast) window.showToast(`${files.length} files READY to send!`, 'success');
 
         // Update Teks di Kotak Upload
         const titleEl = document.querySelector('#upload-zone h4');
         const descEl = document.querySelector('#upload-zone p');
 
-        if(titleEl) {
+        if (titleEl) {
             titleEl.textContent = `${files.length} File(s) Selected`;
             titleEl.classList.add('text-primary');
         }
-        if(descEl) descEl.textContent = "Click 'Create Group' above to send.";
+        if (descEl) descEl.textContent = "Click 'Send Now' to proceed.";
 
     } else {
-        console.error("[UI] Error: App.js not ready (handleFilesSelected missing)");
     }
 }
 
 // 5. Load Saved Files on Page Load
 async function loadSavedFiles() {
     if (!window.loadFilesFromDB) {
-        console.log("[UI] IndexedDB not available, skipping file restore");
         return;
     }
-    
+
     try {
         const savedFiles = await window.loadFilesFromDB();
         if (savedFiles && savedFiles.length > 0) {
-            console.log("[UI] Restoring", savedFiles.length, "files from IndexedDB");
-            
+
             // Restore to App.js
             if (window.handleFilesSelected) {
                 window.handleFilesSelected(savedFiles);
             }
-            
+
             // Update UI
             const titleEl = document.querySelector('#upload-zone h4');
             const descEl = document.querySelector('#upload-zone p');
-            
+
             if (titleEl) {
                 titleEl.textContent = `${savedFiles.length} File(s) Restored`;
                 titleEl.classList.add('text-primary');
             }
             if (descEl) descEl.textContent = "Files restored from previous session.";
-            
+
             if (window.showToast) {
                 window.showToast(`${savedFiles.length} file(s) restored from previous session!`, 'info');
             }
         }
     } catch (error) {
-        console.error("[UI] Error loading saved files:", error);
     }
 }
 
@@ -748,7 +965,269 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(loadSavedFiles, 2000);
 });
 
-// Expose Global
+// ==========================================
+// Transfer Complete UI Logic (Dynamic Loading)
+// ==========================================
+
+async function loadTransferCompleteView() {
+    let overlay = document.getElementById('transfer-complete-overlay');
+    if (overlay) return overlay;
+
+    try {
+        const response = await fetch('pages/transfer-complete.html');
+        if (!response.ok) throw new Error("Failed to load complete page");
+
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        const nav = doc.querySelector('nav');
+        const main = doc.querySelector('main');
+        const footer = doc.querySelector('footer');
+        const decorative = doc.querySelectorAll('body > div'); // Background confettis
+
+        if (!main) throw new Error("Invalid structure");
+
+        // Create overlay container (Full Screen, High Z-Index)
+        overlay = document.createElement('div');
+        overlay.id = 'transfer-complete-overlay';
+        overlay.className = 'fixed inset-0 z-[110] bg-slate-50 dark:bg-slate-900 flex flex-col font-sans transition-all duration-500 opacity-0';
+
+        // Inject Decorative
+        decorative.forEach(el => overlay.appendChild(el.cloneNode(true)));
+
+        // Inject Content
+        if (nav) overlay.appendChild(nav.cloneNode(true));
+        overlay.appendChild(main.cloneNode(true));
+        if (footer) overlay.appendChild(footer.cloneNode(true));
+
+        document.body.appendChild(overlay);
+
+        // Alias reload for compatibility
+        window.reloadApp = () => window.location.reload();
+
+        // Fade In
+        requestAnimationFrame(() => {
+            overlay.classList.remove('opacity-0');
+        });
+
+        return overlay;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function showTransferCompleteUI() {
+    // 1. Sembunyikan Progress Bar
+    const progressOverlay = document.getElementById('transfer-progress-overlay');
+    if (progressOverlay) progressOverlay.style.display = 'none';
+
+    // 2. Load View
+    let overlay = await loadTransferCompleteView();
+    if (!overlay) {
+        window.location.reload();
+        return;
+    }
+
+    // Mengambil settingan terakhir user, default ke 'light'
+    const storedTheme = localStorage.getItem('gopherdrop-theme') || 'light';
+    if (window.applyTheme) {
+        window.applyTheme(storedTheme);
+    }
+    // Safety check: Paksa hapus class dark jika settingan light
+    if (storedTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+        overlay.classList.remove('dark'); // Pastikan overlay juga bersih
+    }
+    // -------------------------------------------------------
+
+    // 3. Persiapan Data
+    const files = window.lastTransferFiles || [];
+    const isReceiver = window.isReceiverMode || false;
+
+    // Logika Nama: Jika Receiver -> Tampilkan Nama Pengirim. Jika Sender -> Tampilkan Penerima.
+    const peerName = isReceiver
+        ? (window.senderDeviceName || "Unknown Sender")
+        : (window.peerDeviceName || (window.transferRecipientCount > 1 ? "Multiple Devices" : "Recipient"));
+
+    const startTime = window.transferStartTime || Date.now();
+    let duration = Date.now() - startTime;
+    if (duration < 1000) duration = 1000;
+
+    const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
+
+    // Formatter Helpers
+    const formatTime = (ms) => {
+        const s = Math.floor(ms / 1000);
+        return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+    };
+    const formatSize = (b) => {
+        if (b === 0) return '0 B';
+        const i = Math.floor(Math.log(b) / Math.log(1024));
+        return (b / Math.pow(1024, i)).toFixed(2) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
+    };
+
+    // 4. Update Elemen Teks Dasar
+    const timeEl = overlay.querySelector('#complete-time-elapsed');
+    const sizeEl = overlay.querySelector('#complete-total-size');
+    const groupNameEl = overlay.querySelector('#complete-group-name');
+    const titleEl = overlay.querySelector('h1');
+    const descEl = overlay.querySelector('main > section > p');
+
+    // Label kecil di atas nama (Group Insights / Sent By)
+    const cardTitleLabel = overlay.querySelector('#complete-group-name').previousElementSibling;
+
+    if (timeEl) timeEl.textContent = formatTime(duration);
+    if (sizeEl) sizeEl.textContent = formatSize(totalSize);
+    if (groupNameEl) groupNameEl.textContent = peerName;
+
+    // 5. LOGIKA ADAPTIF (SENDER vs RECEIVER)
+    if (isReceiver) {
+        // --- TAMPILAN PENERIMA ---
+        if (titleEl) titleEl.innerHTML = 'Files <span class="font-bold text-green-500">Received!</span>';
+        if (descEl) descEl.textContent = `Successfully received files from ${peerName}.`;
+
+        // Ubah "Group Insights" menjadi "SENT BY"
+        if (cardTitleLabel) cardTitleLabel.textContent = "SENT BY";
+        // Pastikan nama pengirim muncul
+        if (groupNameEl) groupNameEl.textContent = peerName;
+    } else {
+        // --- TAMPILAN PENGIRIM ---
+        if (titleEl) titleEl.innerHTML = 'Transfer <span class="font-bold text-primary">Complete!</span>';
+        if (descEl) descEl.textContent = `Successfully delivered files to ${peerName}.`;
+
+        if (cardTitleLabel) cardTitleLabel.textContent = "RECIPIENT";
+        if (groupNameEl) groupNameEl.textContent = peerName;
+    }
+
+    // 6. RENDER LIST FILE
+    const fileListContainer = overlay.querySelector('#complete-file-list');
+    if (fileListContainer) {
+        fileListContainer.innerHTML = '';
+
+        // Jika Receiver, ambil data dari blobs agar punya URL download
+        const fileSource = isReceiver ? (window.receivedFileBlobs || []) : files;
+
+        fileSource.forEach(file => {
+            // Icon Logic Sederhana
+            let icon = 'description';
+            if (file.type && file.type.includes('image')) icon = 'image';
+            else if (file.type && file.type.includes('video')) icon = 'movie';
+            else if (file.type && file.type.includes('audio')) icon = 'audio_file';
+
+            // Tombol Aksi di Kanan (Download vs Centang)
+            let actionButton = '';
+            if (isReceiver && file.url) {
+                // Tombol Re-Download (Receiver)
+                actionButton = `
+                    <a href="${file.url}" download="${file.name}" class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all" title="Download Again">
+                        <span class="material-symbols-outlined">download</span>
+                    </a>
+                `;
+            } else {
+                // Centang (Sender)
+                actionButton = `
+                    <div class="w-10 h-10 flex items-center justify-center text-green-500">
+                        <span class="material-symbols-outlined">check_circle</span>
+                    </div>
+                `;
+            }
+
+            const newItem = document.createElement('div');
+            // Gunakan class border netral agar mengikuti tema
+            newItem.className = 'glass-panel p-4 rounded-3xl flex items-center gap-4 border border-slate-200 dark:border-slate-700';
+            newItem.innerHTML = `
+                <div class="w-12 h-12 bg-slate-100 dark:bg-slate-700/50 text-slate-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <span class="material-symbols-outlined text-2xl">${icon}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="font-bold text-slate-800 dark:text-white truncate text-sm">${file.name}</p>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase">${file.size ? formatFileSize(file.size) : ''}</p>
+                </div>
+                ${actionButton}
+            `;
+            fileListContainer.appendChild(newItem);
+        });
+    }
+
+    // Button Footer in Transfer Complete Overlay
+    const footerBtnContainer = overlay.querySelector('footer div:last-child');
+    if (footerBtnContainer) {
+        footerBtnContainer.innerHTML = '';
+
+        if (isReceiver) {
+            footerBtnContainer.innerHTML += `
+                <button onclick="triggerDownloadAll()" class="px-6 py-3 rounded-xl bg-primary text-white font-bold hover:brightness-105 transition-all flex items-center gap-2 shadow-lg shadow-primary/20">
+                    <span class="material-symbols-outlined">download_for_offline</span>
+                    <span>Download All</span>
+                </button>
+            `;
+        }
+
+        footerBtnContainer.innerHTML += `
+            <button onclick="endTransferSession()" class="px-6 py-3 rounded-xl bg-slate-800 dark:bg-slate-700 text-white font-bold hover:bg-slate-900 transition-all flex items-center gap-2">
+                <span class="material-symbols-outlined">home</span>
+                <span>Dashboard</span>
+            </button>
+        `;
+    }
+}
+
+window.sendDirectlyToSelection = function () {
+    const selectedDevices = getSelectedDevices();
+
+    if (selectedDevices.length === 0) {
+        if (window.showToast) window.showToast('Please select at least one device', 'warning');
+        return;
+    }
+
+    // Cek apakah ada file yang dipilih?
+    const filesData = sessionStorage.getItem('gdrop_transfer_files');
+    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+
+    if (!hasFiles) {
+        // Jika tidak ada file, munculkan prompt upload, lalu lanjut kirim
+        showFileUploadPrompt(() => {
+            proceedDirectTransfer(selectedDevices);
+        });
+        return;
+    }
+
+    proceedDirectTransfer(selectedDevices);
+};
+
+// Helper untuk eksekusi transfer
+function proceedDirectTransfer(selectedDevices) {
+    // Ambil button untuk prevent spam klik
+    const sendBtn = document.getElementById('send-direct-btn');
+
+    if (sendBtn && sendBtn.disabled) return;
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+    }
+
+    // Reset state transfer sebelumnya jika ada
+    if (window.resetTransferState) window.resetTransferState(false);
+
+    // 1. Simpan target device ke session
+    sessionStorage.setItem('gdrop_transfer_devices', JSON.stringify(selectedDevices));
+
+    // 2. Set nama sesi sementara (misal: "2 Devices" atau nama device kalau cuma 1)
+    const sessionName = selectedDevices.length === 1 ? selectedDevices[0].name : `${selectedDevices.length} Devices`;
+    sessionStorage.setItem('gdrop_group_name', sessionName);
+
+    // 3. Mulai proses transfer (panggil fungsi core di app.js)
+    if (window.startTransferProcess) {
+        window.startTransferProcess();
+        if (window.showToast) window.showToast(`Sending to ${sessionName}...`, 'success');
+    }
+}
+
+window.showTransferCompleteUI = showTransferCompleteUI;
+
+// Expose Globals
 window.initFileUpload = initFileUpload;
 window.showTransferProgressUI = showTransferProgressUI;
 window.updateFileProgressUI = updateFileProgressUI;
@@ -762,222 +1241,10 @@ window.updateDeviceListFromBackend = updateDeviceListFromBackend;
 window.openCreateGroupModal = openCreateGroupModal;
 window.closeCreateGroupModal = closeCreateGroupModal;
 window.confirmCreateGroup = confirmCreateGroup;
-
-// ==========================================
-// Transfer Complete UI Logic (Dynamic Loading)
-// ==========================================
-
-async function loadTransferCompleteView() {
-    let overlay = document.getElementById('transfer-complete-overlay');
-    if (overlay) return overlay;
-
-    try {
-        console.log("[UI] Loading transfer complete view...");
-        const response = await fetch('pages/transfer-complete.html');
-        if (!response.ok) throw new Error("Failed to load complete page");
-        
-        const html = await response.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        
-        const nav = doc.querySelector('nav');
-        const main = doc.querySelector('main');
-        const footer = doc.querySelector('footer');
-        const decorative = doc.querySelectorAll('body > div'); // Background confettis
-        
-        if (!main) throw new Error("Invalid structure");
-
-        // Create overlay container (Full Screen, High Z-Index)
-        overlay = document.createElement('div');
-        overlay.id = 'transfer-complete-overlay';
-        overlay.className = 'fixed inset-0 z-[110] bg-slate-50 dark:bg-slate-900 flex flex-col font-sans transition-all duration-500 opacity-0';
-        
-        // Inject Decorative
-        decorative.forEach(el => overlay.appendChild(el.cloneNode(true)));
-
-        // Inject Content
-        if(nav) overlay.appendChild(nav.cloneNode(true));
-        overlay.appendChild(main.cloneNode(true));
-        if(footer) overlay.appendChild(footer.cloneNode(true));
-        
-        document.body.appendChild(overlay);
-
-        // Alias reload for compatibility
-        window.reloadApp = () => window.location.reload();
-
-        // Fade In
-        requestAnimationFrame(() => {
-            overlay.classList.remove('opacity-0');
-        });
-        
-        return overlay;
-    } catch (e) {
-        console.error("[UI] Error loading complete view:", e);
-        return null;
-    }
-}
-
-async function showTransferCompleteUI() {
-    // 1. Hide Progress Overlay
-    const progressOverlay = document.getElementById('transfer-progress-overlay');
-    if(progressOverlay) progressOverlay.style.display = 'none';
-
-    // 2. Load Complete View
-    let overlay = await loadTransferCompleteView();
-    if (!overlay) {
-        alert("Transfer Complete!");
-        window.location.reload();
-        return;
-    }
-
-    // 3. Populate Data (Real Statistics)
-    const files = window.lastTransferFiles || [];
-    const startTime = window.transferStartTime || Date.now();
-    const elapsed = Date.now() - startTime;
-    
-    // Get receiver/sender state
-    const isReceiver = window.isReceiverMode || false;
-    const deviceName = window.peerDeviceName || (isReceiver ? 'Sender' : 'Device');
-    
-    // Calculate Total Size
-    const totalSize = files.reduce((acc, file) => acc + (file.size || 0), 0);
-    
-    // Helper Formatter
-    const formatSize = (bytes) => {
-        if (!bytes || bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-    
-    const formatTime = (ms) => {
-        if (!ms) return '0s';
-        const seconds = Math.floor(ms / 1000);
-        if (seconds < 60) return `${seconds}s`;
-        const minutes = Math.floor(seconds / 60);
-        return `${minutes}m ${seconds % 60}s`;
-    };
-
-    // Update Stats Text
-    const timeEl = overlay.querySelector('#complete-time-elapsed');
-    const sizeEl = overlay.querySelector('#complete-total-size');
-    if(timeEl) timeEl.textContent = formatTime(elapsed);
-    if(sizeEl) sizeEl.textContent = formatSize(totalSize);
-
-    // Update Header Title & Description based on mode
-    const titleEl = overlay.querySelector('h1');
-    const descEl = overlay.querySelector('main > section > p');
-    
-    if (isReceiver) {
-        if (titleEl) titleEl.innerHTML = 'Files <span class="font-bold">Received!</span>';
-        if (descEl) descEl.textContent = `Successfully received all files from ${deviceName}.`;
-    } else {
-        if (titleEl) titleEl.innerHTML = 'Transfer <span class="font-bold">Complete!</span>';
-        if (descEl) descEl.textContent = `Successfully delivered all files to ${deviceName}.`;
-    }
-
-    // Get Session Name
-    const activeGroupName = document.getElementById('active-group-name')?.textContent || 'Session';
-    const groupNameEl = overlay.querySelector('#complete-group-name');
-    if (groupNameEl) groupNameEl.textContent = activeGroupName;
-
-    // Update Recipient List logic
-    const recipientListContainer = overlay.querySelector('#complete-recipient-list');
-    if (recipientListContainer) {
-        const deviceCount = window.transferRecipientCount || 1;
-        const deviceText = deviceCount === 1 ? "1 Device" : `${deviceCount} Devices`;
-        
-        recipientListContainer.innerHTML = `
-        <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-green-50 dark:bg-green-500/10 flex items-center justify-center border-2 border-white dark:border-slate-700 shadow-sm overflow-hidden text-green-500">
-                <span class="material-symbols-outlined">group</span>
-            </div>
-            <div class="flex-1">
-                <p class="text-sm font-bold text-slate-700 dark:text-slate-200">${activeGroupName}</p>
-                <p class="text-[10px] font-bold text-green-500 uppercase">${deviceText} • Success</p>
-            </div>
-        </div>`;
-    }
-
-    // Update File List
-    const fileListContainer = overlay.querySelector('#complete-file-list');
-    if (fileListContainer && files.length > 0) {
-        fileListContainer.innerHTML = ''; // Clear items
-        
-        files.forEach(file => {
-            const name = file.name || 'File';
-            const sizeStr = formatSize(file.size);
-            let icon = 'description';
-            if (file.type && file.type.includes('image')) icon = 'image';
-            else if (file.type && file.type.includes('pdf')) icon = 'picture_as_pdf';
-            else if (file.name.endsWith('.zip') || file.name.endsWith('.rar')) icon = 'folder_zip';
-            
-            const newItem = document.createElement('div');
-            newItem.className = 'glass-panel p-4 rounded-3xl flex items-center gap-5 hover:border-primary/30 transition-colors';
-            newItem.innerHTML = `
-                <div class="w-20 h-20 bg-blue-50 dark:bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center overflow-hidden">
-                    <span class="material-symbols-outlined text-3xl">${icon}</span>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <p class="font-bold text-slate-800 dark:text-white truncate">${name}</p>
-                    <p class="text-xs text-slate-400 dark:text-slate-500 font-medium">${sizeStr} • Completed</p>
-                </div>
-                <button class="w-10 h-10 flex items-center justify-center text-green-500 flex-shrink-0">
-                    <span class="material-symbols-outlined">check_circle</span>
-                </button>
-            `;
-            fileListContainer.appendChild(newItem);
-        });
-    }
-    
-    // Update Footer Buttons based on mode
-    const shareAgainBtn = overlay.querySelector('footer button:first-of-type');
-    if (shareAgainBtn && isReceiver) {
-        shareAgainBtn.innerHTML = `
-            <span class="material-symbols-outlined text-lg md:text-xl">folder_open</span>
-            <span class="whitespace-nowrap">Open Downloads</span>
-        `;
-        shareAgainBtn.onclick = async () => {
-            try {
-                // Call backend API to open Downloads folder
-                const response = await fetch('/api/v1/system/open-downloads');
-                const result = await response.json();
-                
-                if (result.success) {
-                    // Show success toast
-                    if (window.showToast) {
-                        window.showToast('Opening Downloads folder...', 'success');
-                    }
-                    
-                    // Show file list
-                    const fileNames = window.lastDownloadedFiles || [];
-                    if (fileNames.length > 0) {
-                        setTimeout(() => {
-                            if (window.showToast) {
-                                window.showToast(`${fileNames.length} file(s) downloaded: ${fileNames.join(', ')}`, 'info');
-                            }
-                        }, 500);
-                    }
-                } else {
-                    // Fallback if API fails
-                    alert(`✓ Files downloaded to:\n${result.data?.path || 'Downloads folder'}\n\nFiles: ${(window.lastDownloadedFiles || []).join(', ')}`);
-                }
-                
-                // Return home after short delay
-                setTimeout(() => endTransferSession(), 1500);
-                
-            } catch (error) {
-                console.error('Failed to open Downloads folder:', error);
-                
-                // Fallback: show alert with file info
-                const fileNames = window.lastDownloadedFiles || [];
-                alert(`✓ Files saved to Downloads folder\n\nFiles received:\n${fileNames.map(f => '• ' + f).join('\n')}`);
-                
-                setTimeout(() => endTransferSession(), 500);
-            }
-        };
-    }
-}
-
+window.sendToExistingGroup = sendToExistingGroup;
+window.showFileUploadPrompt = showFileUploadPrompt;
+window.closeFileUploadPrompt = closeFileUploadPrompt;
+window.triggerPromptFileSelect = triggerPromptFileSelect;
+window.proceedDirectTransfer = proceedDirectTransfer;
+window.sendDirectlyToSelection = sendDirectlyToSelection;
 window.showTransferCompleteUI = showTransferCompleteUI;

@@ -5,6 +5,17 @@ import { loadComponent } from "./helper.js";
 // CONFIGURATION & CONSTANTS
 // ==========================================
 
+const IS_LOCALHOST = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// URL Backend Ngrok Static (Tanpa https:// dan tanpa slash akhir)
+const PROD_HOST = 'washable-collusively-arcelia.ngrok-free.dev';
+const LOCAL_HOST = 'localhost:8080';
+
+// URL HTTP API (untuk fetch SSID, dll)
+const PROD_API_URL = `https://${PROD_HOST}`;
+const LOCAL_API_URL = `http://${LOCAL_HOST}`;
+const API_BASE_URL = IS_LOCALHOST ? LOCAL_API_URL : PROD_API_URL;
+
 // WebSocket Message Types (Backend Protocol)
 const WS_TYPE = {
     START_SHARING: 3,
@@ -27,12 +38,14 @@ const RTC_CONFIG = {
     ]
 };
 
+// Chunk Size untuk Transfer File
 const CHUNK_SIZE = 16 * 1024; // 16 KB per chunk
 
 // ==========================================
 // GLOBAL VARIABLES
 // ==========================================
 
+// WebSocket State
 let signalingSocket = null;
 let isSocketConnected = false;
 let currentTransactionId = null;
@@ -40,85 +53,102 @@ let discoveryInterval = null;
 let pendingTransactionId = null;
 
 // WebRTC State
-let peerConnection = null;
-let dataChannel = null;
-let targetPublicKey = null; // Lawan bicara (Receiver/Sender)
-let fileQueue = [];         // Antrian file
-let currentFile = null;
+let peerConnections = {};
+let dataChannels = {};
+let acceptedPublicKeys = new Set();
+let fileQueue = [];
 
 // File Transfer State (Sender)
-let currentFileIndex = 0;
+let transferStates = {};
 
 // File Transfer State (Receiver)
 let incomingFileInfo = null;
 let incomingFileBuffer = [];
 let incomingReceivedSize = 0;
+let receivedFileCount = 0;
+
+// File Who is Sending
+let isInitiatorRole = false;
 
 // Helper wrapper untuk Toast (Safe Mode)
 const showToast = (msg, type) => {
     if (window.showToast) window.showToast(msg, type);
-    else console.log(`[Toast ${type}] ${msg}`);
 };
+
+// Anti spam
+let consecutiveFailures = 0;
+let cooldownInterval = null;
 
 // ==========================================
 // INITIALIZATION
 // ==========================================
 
+// Initialize App
 async function initializeApp() {
-    // 1. Load Components
-    await loadComponent('sidebar-container', 'components/sidebar.html');
-    await loadComponent('upload-zone-container', 'components/upload-zone.html');
+    const prefix = window.location.pathname.includes('/pages/') ? '../' : '';
 
-    // 2. Auth & Connection
+    // Load Common Components
+    await loadComponent('sidebar-container', `${prefix}components/sidebar.html`);
+
+    if (!document.getElementById('incoming-modal-container')) {
+        const modalDiv = document.createElement('div');
+        modalDiv.id = 'incoming-modal-container';
+        document.body.appendChild(modalDiv);
+    }
+    await loadComponent('incoming-modal-container', `${prefix}components/incoming-modal.html`);
+
+    // Upload Zone: Hanya di-load jika containernya ada (Dashboard)
+    if (document.getElementById('upload-zone-container')) {
+        await loadComponent('upload-zone-container', `${prefix}components/upload-zone.html`);
+    }
+
+    // Auth & Connection (Menjaga status tetap "Online" di semua page)
     const token = await initAuth();
     if (token) {
         connectToSignalingServer(token);
-    } else {
-        alert("Authentication Failed. Please reload.");
     }
 
-    // 3. Init UI Logic
+    // Init UI Logic
     if (typeof initFileUpload === 'function') initFileUpload();
     highlightActiveNav();
     startNetworkSpeedIndicator();
-    fetchNetworkSSID(); // Fetch and display current network SSID
-
-    // 4. Init Empty State
-    if (typeof renderDevices === 'function' && document.getElementById('device-list')) {
-        renderDevices([], 'device-list');
-    }
+    await fetchNetworkSSID();
 }
 
 // Fetch current network SSID from backend API
 async function fetchNetworkSSID() {
     try {
-        const response = await fetch('/api/v1/network/ssid');
+        const response = await fetch(`${API_BASE_URL}/api/v1/network/ssid`, {
+            headers: {
+                "ngrok-skip-browser-warning": "true"
+            }
+        });
+
         if (!response.ok) throw new Error('Failed to fetch SSID');
-        
+
         const result = await response.json();
         if (result.success && result.data) {
             const ssid = result.data.ssid || 'Unknown Network';
-            
+
             // Update desktop element
             const desktopEl = document.getElementById('network-ssid-desktop');
             if (desktopEl) desktopEl.textContent = ssid;
-            
+
             // Update mobile element
             const mobileEl = document.getElementById('network-ssid-mobile');
             if (mobileEl) mobileEl.textContent = ssid;
         }
     } catch (error) {
-        console.error('[Network] Failed to fetch SSID:', error);
         // Set fallback text
         const desktopEl = document.getElementById('network-ssid-desktop');
         if (desktopEl) desktopEl.textContent = 'Local Network';
-        
+
         const mobileEl = document.getElementById('network-ssid-mobile');
         if (mobileEl) mobileEl.textContent = 'Local Network';
     }
 }
 
-
+// Some UI Highlight on Navigation Bar
 function highlightActiveNav() {
     const currentPath = window.location.pathname;
     const navItems = document.querySelectorAll('.nav-item');
@@ -137,34 +167,49 @@ function highlightActiveNav() {
 }
 
 // ==========================================
-// WEBSOCKET LOGIC (CORE)
+// WEBSOCKET LOGIC
 // ==========================================
 
 function connectToSignalingServer(token) {
-    if (signalingSocket && (signalingSocket.readyState === WebSocket.OPEN || signalingSocket.readyState === WebSocket.CONNECTING)) {
-        return;
-    }
+    // Prevent multiple connections
+    if (signalingSocket && (signalingSocket.readyState === WebSocket.OPEN || signalingSocket.readyState === WebSocket.CONNECTING)) return;
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.hostname}:8080/api/v1/protected/ws?token=${token}`;
+    // ==========================================
+    // DYNAMIC WEBSOCKET CONFIGURATION
+    // ==========================================
 
-    console.log('[WS] Connecting to:', wsUrl);
+    // Determine Protocol (WS for local HTTP, WSS for HTTPS/Cloudflare/Ngrok)
+    const protocol = (window.location.protocol === 'https:' || !IS_LOCALHOST) ? 'wss:' : 'ws:';
+
+    // Determine Host Backend (Get from Global Constants above)
+    const host = IS_LOCALHOST ? LOCAL_HOST : PROD_HOST;
+
+    // WebSocket URL
+    const wsUrl = `${protocol}//${host}/api/v1/protected/ws?token=${token}`;
+
+    // Init Socket
     signalingSocket = new WebSocket(wsUrl);
 
+    // ==========================================
+    // EVENT HANDLERS
+    // ==========================================
+
+    // Fetching "Who" is online every 3 seconds
     signalingSocket.onopen = () => {
-        console.log('[WS] Connected');
         isSocketConnected = true;
 
-        // Minta list user pertama kali
+        const isDiscoverable = localStorage.getItem('gdrop_is_discoverable') !== 'false';
+
+        sendSignalingMessage(2, isDiscoverable);
+
         sendSignalingMessage(WS_TYPE.START_SHARING, null);
 
-        // Polling tiap 5 detik
         if (discoveryInterval) clearInterval(discoveryInterval);
         discoveryInterval = setInterval(() => {
             if (isSocketConnected) {
                 sendSignalingMessage(WS_TYPE.START_SHARING, null);
             }
-        }, 5000);
+        }, 3000);
     };
 
     signalingSocket.onmessage = (event) => {
@@ -172,26 +217,18 @@ function connectToSignalingServer(token) {
             const msg = JSON.parse(event.data);
             handleSignalingMessage(msg);
         } catch (e) {
-            console.error('[WS] Failed to parse message:', e);
         }
     };
 
-    signalingSocket.onerror = (error) => {
-        console.error('[WS] Error:', error);
-        showToast('Connection Error', 'error');
-    };
-
     signalingSocket.onclose = () => {
-        console.log('[WS] Disconnected');
         isSocketConnected = false;
         signalingSocket = null;
         if (discoveryInterval) clearInterval(discoveryInterval);
 
-        // Auto Reconnect
+        // Auto Reconnect dalam 3 detik
         setTimeout(() => {
-            console.log('[WS] Reconnecting...');
             const token = localStorage.getItem('gdrop_token');
-            if(token) connectToSignalingServer(token);
+            if (token) connectToSignalingServer(token);
         }, 3000);
     };
 }
@@ -205,49 +242,49 @@ function sendSignalingMessage(type, data) {
 // Handle Incoming Messages
 function handleSignalingMessage(msg) {
     switch (msg.type) {
+        // Device List Update
         case WS_TYPE.USER_SHARE_LIST:
             if (typeof updateDeviceListFromBackend === 'function') {
                 updateDeviceListFromBackend(msg.data);
             }
             break;
 
+        // New Transaction Created - Offering
         case WS_TYPE.USER_SHARE_TARGET:
+            // [FIXED] Hapus logic busy check manual disini, biarkan handleTransactionCreated mengurusnya
+            // agar bisa mengirim sinyal auto-decline jika busy.
             handleTransactionCreated(msg.data);
             break;
 
+        // New Transaction Created - Receiver
         case WS_TYPE.TRANSACTION_SHARE_ACCEPT:
-            // Cek apakah ini Undangan (Receiver) atau Jawaban (Sender)
             if (msg.data && msg.data.transaction && msg.data.sender) {
-                // KASUS: Receiver dapet invite
                 if (msg.data.transaction.sender && msg.data.transaction.sender.user) {
                     targetPublicKey = msg.data.transaction.sender.user.public_key;
                 }
                 handleIncomingTransferOffer(msg.data);
             } else {
-                // KASUS: Sender dapet notif Accepted atau Declined
-                console.log("[Sender] User responded:", msg.data);
-
-                // Handle new decline_notification format from backend
+                // Receiving accept/decline notification
                 if (msg.data && msg.data.type === 'decline_notification' && msg.data.declined) {
                     const responderName = msg.data.username || "Recipient";
                     showToast(`${responderName} declined your invitation.`, 'error');
-                    resetTransferState();
                     return;
                 }
 
-                // Handle accept_notification format from backend
+                // Handle accept notification
                 if (msg.data && msg.data.type === 'accept_notification' && msg.data.accepted) {
                     const responderName = msg.data.username || "Recipient";
+
+                    const responderKey = msg.data.sender_public_key;
+
                     showToast(`${responderName} accepted! Starting transfer...`, 'success');
-                    
+
                     // Auto-start transaction
-                    if (currentTransactionId) {
-                        console.log("[Sender] Auto-starting transaction after acceptance...");
-                        
-                        // Simpan Public Key Penerima (ambil dari session storage)
-                        const devices = JSON.parse(sessionStorage.getItem('gdrop_transfer_devices') || '[]');
-                        if (devices.length > 0) targetPublicKey = devices[0].id;
-                        
+                    if (currentTransactionId && responderKey) {
+                        acceptedPublicKeys.add(responderKey);
+
+                        startWebRTCConnection(true, responderKey);
+
                         sendSignalingMessage(WS_TYPE.START_TRANSACTION, {
                             transaction_id: currentTransactionId
                         });
@@ -255,7 +292,7 @@ function handleSignalingMessage(msg) {
                     return;
                 }
 
-                // Legacy decline format
+                // Fallback Legacy Logic
                 if (msg.data.accept === false) {
                     const responderName = msg.data.sender || "Recipient";
                     showToast(`${responderName} declined the transfer.`, 'error');
@@ -263,11 +300,10 @@ function handleSignalingMessage(msg) {
                     return;
                 }
 
-                // Legacy: Cek ID transaksi cocok & kita punya ID aktif (fallback)
+                // Fallback Legacy Accept
                 if (currentTransactionId && msg.data.transaction && msg.data.transaction.id === currentTransactionId) {
-                    console.log("[Sender] Auto-starting transaction (legacy)...");
                     const devices = JSON.parse(sessionStorage.getItem('gdrop_transfer_devices') || '[]');
-                    if(devices.length > 0) targetPublicKey = devices[0].id;
+                    if (devices.length > 0) targetPublicKey = devices[0].id;
 
                     sendSignalingMessage(WS_TYPE.START_TRANSACTION, {
                         transaction_id: currentTransactionId
@@ -276,17 +312,15 @@ function handleSignalingMessage(msg) {
             }
             break;
 
+        // Start Transaction (Both Sides) -> WebSocket out and WebRTC Initiation
         case WS_TYPE.START_TRANSACTION:
-            console.log("START TRANSACTION RECEIVED!", msg.data);
+            consecutiveFailures = 0;
+            window.transferStartTime = Date.now();
+
             showToast('Initializing Connection...', 'success');
 
-            // DETEKSI LOGIKA SENDER VS RECEIVER (CRITICAL FIX)
-            // Cek Transaction ID dari paket.
-            // - Jika ID sama dengan currentTransactionId (yang kita buat), maka kita Sender.
-            // - Jika ID beda atau kita tidak punya ID, maka kita Receiver.
-            
             let isInitiator = false;
-            
+
             if (msg.data && msg.data.transaction_id) {
                 if (currentTransactionId && msg.data.transaction_id === currentTransactionId) {
                     isInitiator = true;
@@ -294,29 +328,25 @@ function handleSignalingMessage(msg) {
                     isInitiator = false;
                 }
             } else {
-                 // Fallback Legacy (Jika tidak ada ID di paket)
-                 const myPubKey = localStorage.getItem('gdrop_public_key');
-                 const msgSender = msg.data.sender_public_key || msg.data.sender_id;
-                 if (msgSender && myPubKey) isInitiator = (msgSender === myPubKey);
-                 else isInitiator = (fileQueue.length > 0);
+                // Fallback Legacy (Jika tidak ada ID di paket)
+                const myPubKey = localStorage.getItem('gdrop_public_key');
+                const msgSender = msg.data.sender_public_key || msg.data.sender_id;
+                if (msgSender && myPubKey) isInitiator = (msgSender === myPubKey);
+                else isInitiator = (fileQueue.length > 0);
             }
 
             // Siapkan antrian file & UI
             let displayFiles = [];
-
             if (isInitiator) {
-                // fileQueue sudah berisi File objects dari handleFilesSelected
-                // JANGAN overwrite dengan metadata dari sessionStorage!
+                // Sender Side (Queue dari IndexedDB)
                 displayFiles = fileQueue.map(f => ({ name: f.name, size: f.size, type: f.type }));
             } else {
-                // Ambil dari data WebSocket (Backend sudah kirim list file)
+                // Receiver Side (Dari paket data)
                 if (msg.data && msg.data.files) {
                     displayFiles = msg.data.files;
-                } else {
-                    displayFiles = [{name: "Unknown File", size: 0}];
                 }
-                
-                // Simpan sender device name untuk receiver
+
+                // Save sender device name globally
                 if (msg.data && msg.data.sender_name) {
                     window.senderDeviceName = msg.data.sender_name;
                 } else if (msg.data && msg.data.sender) {
@@ -325,28 +355,36 @@ function handleSignalingMessage(msg) {
             }
 
             // Tampilkan Overlay Progress
-            if(window.showTransferProgressUI) {
-                // Parameter ke-3: isReceiver (!isInitiator)
+            if (window.showTransferProgressUI) {
                 window.showTransferProgressUI(displayFiles, 1, !isInitiator);
             }
 
-            // MULAI WebRTC Handshake
-            startWebRTCConnection(isInitiator);
+            // Set Global Role & Start WebRTC
+            isInitiatorRole = isInitiator;
+            sessionStorage.setItem('gdrop_is_sender', isInitiator);
+
+            if (!isInitiator) {
+                startWebRTCConnection(false, null);
+            }
             break;
 
+        // Data sended using WebSocket for exchanging information (IP, Port, Codecs, etc) for NAT Traversal
+        // But it used WebRTC for P2P data transfer
         case WS_TYPE.WEBRTC_SIGNAL:
             handleWebRTCSignal(msg.data);
             break;
 
-        case 2: // CONFIG_DISCOVERABLE
-            console.log('[WS] Discoverable status synced');
+        // System Messages
+        case 2: // CONFIG_DISCOVERABLE (Ask to set discoverable state)
             break;
 
-        case 1: // ERROR
-            console.error('[WS] Server error:', msg.data);
-            if(msg.data !== "invalid websocket message") {
+        case 1: // ERROR Handling
+            if (msg.data !== "invalid websocket message") {
                 showToast(msg.data, 'error');
             }
+            break;
+
+        case 0: // INFO / KEEPALIVE
             break;
     }
 }
@@ -356,7 +394,6 @@ function handleSignalingMessage(msg) {
 // ==========================================
 
 function createNewTransaction() {
-    console.log("Requesting new transaction ID...");
     sendSignalingMessage(WS_TYPE.NEW_TRANSACTION, null);
 }
 
@@ -367,10 +404,8 @@ function handleTransactionCreated(data) {
 
     if (targetDevices.length > 0 && isInitialId) {
         currentTransactionId = transactionId;
-        console.log("Transaction Active (Sender):", currentTransactionId);
 
-        // --- STEP 1: KIRIM INFO FILE DULU (DIPINDAH KE ATAS) ---
-        // Gunakan fileQueue langsung karena datanya ada di memori
+        // Load from IndexedDB
         if (fileQueue.length > 0) {
             const filesMeta = fileQueue.map(f => ({
                 name: f.name,
@@ -378,14 +413,13 @@ function handleTransactionCreated(data) {
                 type: f.type || 'application/octet-stream'
             }));
 
-            console.log("[Sender] Sending file metadata first...");
             sendSignalingMessage(WS_TYPE.FILE_SHARE_TARGET, {
                 transaction_id: currentTransactionId,
                 files: filesMeta
             });
         }
 
-        // --- STEP 2: BARU KIRIM INVITE ---
+        // Then send target devices
         const targetPublicKeys = targetDevices.map(d => d.id);
         sendSignalingMessage(WS_TYPE.USER_SHARE_TARGET, {
             transaction_id: currentTransactionId,
@@ -393,7 +427,7 @@ function handleTransactionCreated(data) {
         });
 
     } else {
-        if(!isInitialId && data.id !== currentTransactionId) {
+        if (!isInitialId && data.id !== currentTransactionId) {
             handleIncomingTransferOffer(data);
         }
     }
@@ -402,20 +436,26 @@ function handleTransactionCreated(data) {
 function handleIncomingTransferOffer(data) {
     if (!data || !data.transaction) return;
 
+    // Auto reject if the receiver is still in another transfer
+    const overlay = document.getElementById('transfer-progress-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        sendSignalingMessage(WS_TYPE.TRANSACTION_SHARE_ACCEPT, {
+            transaction_id: data.transaction.id,
+            accept: false
+        });
+        return;
+    }
+
     pendingTransactionId = data.transaction.id;
-    console.log("[Receiver] Incoming Offer:", data);
-
     const senderName = data.sender || "Unknown Device";
-
-    // 1. Ambil array files asli dari data transaksi
     const files = data.transaction.files || [];
 
-    // 2. Cek apakah fungsi UI sudah siap
+    // Check if custom modal function exists
     if (window.showIncomingModal) {
         window.showIncomingModal(senderName, files);
     } else {
         const fileSummary = files.length > 0
-            ? `${files[0].name} ${files.length > 1 ? `(+${files.length-1} more)` : ''}`
+            ? `${files[0].name} ${files.length > 1 ? `(+${files.length - 1} more)` : ''}`
             : 'Unknown Files';
 
         const accept = confirm(`Incoming from ${senderName}: ${fileSummary}. Accept?`);
@@ -423,9 +463,10 @@ function handleIncomingTransferOffer(data) {
     }
 }
 
-window.respondToInvitation = function(isAccepted) {
+window.respondToInvitation = function (isAccepted) {
     if (!pendingTransactionId) return;
 
+    // If Accept then send the accept signal for creating WebRTC connection
     sendSignalingMessage(WS_TYPE.TRANSACTION_SHARE_ACCEPT, {
         transaction_id: pendingTransactionId,
         accept: isAccepted
@@ -435,10 +476,15 @@ window.respondToInvitation = function(isAccepted) {
 
     if (!isAccepted) {
         pendingTransactionId = null;
-        resetTransferState()
+        resetTransferState();
         showToast('Transfer declined', 'info');
     } else {
         showToast('Accepted! Preparing connection...', 'success');
+
+        if (!window.location.pathname.includes('index.html')) {
+            const prefix = window.location.pathname.includes('/pages/') ? '../' : '';
+            window.location.href = `${prefix}index.html`;
+        }
     }
 };
 
@@ -446,90 +492,123 @@ window.respondToInvitation = function(isAccepted) {
 // WEBRTC LOGIC (P2P ENGINE)
 // ==========================================
 
-async function startWebRTCConnection(isInitiator) {
-    console.log(`[WebRTC] Starting... Initiator: ${isInitiator}`);
+async function startWebRTCConnection(isInitiator, targetKey) {
+    // Don't connect again if the connection is already established
+    if (targetKey && peerConnections[targetKey] &&
+        (peerConnections[targetKey].connectionState === 'connected' ||
+            peerConnections[targetKey].connectionState === 'connecting')) {
+        return;
+    }
 
-    // 1. Reset Connection
-    if (peerConnection) peerConnection.close();
-    peerConnection = new RTCPeerConnection(RTC_CONFIG);
+    // Close existing connection if it exists
+    if (targetKey && peerConnections[targetKey]) {
+        peerConnections[targetKey].close();
+    }
 
-    // 2. Setup ICE Handler
-    peerConnection.onicecandidate = (event) => {
+    // Reset status transfer file untuk user ini
+    if (isInitiator && targetKey) {
+        transferStates[targetKey] = { index: 0, busy: false };
+    }
+
+    // Create Peer Connection
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    if (targetKey) peerConnections[targetKey] = pc;
+
+    // Setup ICE Handler
+    pc.onicecandidate = (event) => {
         if (event.candidate) {
             sendSignalingMessage(WS_TYPE.WEBRTC_SIGNAL, {
                 transaction_id: currentTransactionId || pendingTransactionId,
-                target_key: targetPublicKey,
+                target_key: targetKey,
                 data: { type: 'candidate', candidate: event.candidate }
             });
         }
     };
 
-    peerConnection.onconnectionstatechange = () => {
-        console.log(`[WebRTC] Connection State: ${peerConnection.connectionState}`);
-        if(peerConnection.connectionState === 'connected') {
+    // Connection State Change Handler
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
             showToast('P2P Connected!', 'success');
-
-            // UI Progress sudah ditampilkan saat START_TRANSACTION
-            // Tidak perlu memanggil showTransferProgressUI lagi di sini
-            // untuk menghindari override parameter isReceiver
         }
     };
 
-    // 3. Setup Data Channel
-    if (isInitiator) {
-        // SENDER: Bikin Channel
-        dataChannel = peerConnection.createDataChannel("file-transfer");
-        setupDataChannel(dataChannel);
+    // Setup Data Channel
+    if (isInitiator && targetKey) {
+        // SENDER: Create Channel
+        const dc = pc.createDataChannel("file-transfer");
 
-        // Bikin Offer
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
+        dataChannels[targetKey] = dc;
+        setupDataChannel(dc, targetKey);
+
+        // Create Offer
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
 
         sendSignalingMessage(WS_TYPE.WEBRTC_SIGNAL, {
             transaction_id: currentTransactionId,
-            target_key: targetPublicKey,
+            target_key: targetKey,
             data: { type: 'offer', sdp: offer }
         });
-
     } else {
-        // RECEIVER: Nunggu Channel
-        peerConnection.ondatachannel = (event) => {
-            dataChannel = event.channel;
-            setupDataChannel(dataChannel);
+        // RECEIVER: Tunggu channel dari Sender
+        pc.ondatachannel = (event) => {
+            const senderKey = targetKey;
+            if (senderKey) {
+                dataChannels[senderKey] = event.channel;
+                setupDataChannel(event.channel, senderKey);
+            }
         };
     }
 }
 
 async function handleWebRTCSignal(signal) {
-    if (!peerConnection) return;
+    const remoteKey = signal.from_key;
     const data = signal.data;
 
-    if (data.type === 'offer') {
-        // RECEIVER: Terima Offer -> Bikin Answer
-        // PENTING: Set targetPublicKey agar ICE candidates bisa dikirim ke sender
-        targetPublicKey = signal.from_key;
-        
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-
-        sendSignalingMessage(WS_TYPE.WEBRTC_SIGNAL, {
-            transaction_id: pendingTransactionId,
-            target_key: signal.from_key,
-            data: { type: 'answer', sdp: answer }
-        });
-
-    } else if (data.type === 'answer') {
-        // SENDER: Terima Answer
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-
-    } else if (data.type === 'candidate') {
-        // Tambah ICE Candidate
-        try {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-            console.error("Error adding ICE:", e);
+    // If the remote key is not found, create a new peer connection
+    if (!peerConnections[remoteKey]) {
+        if (data.type === 'offer') {
+            // [FIXED] Tambahkan await biar koneksi siap dulu
+            await startWebRTCConnection(false, remoteKey);
+        } else {
+            return;
         }
+    }
+
+    // Take the peer connection
+    const pc = peerConnections[remoteKey];
+
+    if (!pc) {
+        // Optional log, maybe offer came too early or late
+        return;
+    }
+
+    try {
+        if (data.type === 'offer') {
+            // Receiver Handle Offer
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            sendSignalingMessage(WS_TYPE.WEBRTC_SIGNAL, {
+                transaction_id: pendingTransactionId,
+                target_key: remoteKey,
+                data: { type: 'answer', sdp: answer }
+            });
+
+        } else if (data.type === 'answer') {
+            // Sender Handle Answer
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        } else if (data.type === 'candidate') {
+            // Handle ICE Candidate
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) {
+                console.error("ICE Error", e);
+            }
+        }
+    } catch (e) {
+        window.showToast("WebRTC Signal Error: " + e, "error");
     }
 }
 
@@ -537,100 +616,119 @@ async function handleWebRTCSignal(signal) {
 // DATA TRANSFER LOGIC (CHUNK)
 // ==========================================
 
-function setupDataChannel(channel) {
+function setupDataChannel(channel, key) {
     channel.binaryType = 'arraybuffer'; // Kirim data sebagai ArrayBuffer
 
+    // On Open Event
     channel.onopen = () => {
-        console.log("[DataChannel] OPEN");
-        if (fileQueue.length > 0) {
-            currentFileIndex = 0;
-            sendCurrentFile();
+        if (isInitiatorRole && fileQueue.length > 0) {
+            if (!transferStates[key]) transferStates[key] = { index: 0, busy: false };
+
+            // Mulai kirim file ke user 'key' ini saja
+            sendFileTo(key);
         }
     };
 
-    channel.onmessage = (event) => {
-        handleIncomingData(event.data);
-    };
+    // On Message Event
+    channel.onmessage = (event) => handleIncomingData(event.data);
 }
 
-function sendCurrentFile() {
-    if (currentFileIndex >= fileQueue.length) {
-        console.log("All files sent.");
-        const statusEl = document.getElementById('transfer-status-text');
-        if (statusEl) statusEl.textContent = "ALL COMPLETED";
-        
-        // Show completion UI
-        if (window.showTransferCompleteUI) window.showTransferCompleteUI();
+function sendFileTo(key) {
+    const state = transferStates[key];
+    if (!state) return;
+
+    // Cek Queue User Ini
+    if (state.index >= fileQueue.length) {
+        // [FIXED] Panggil fungsi Juri untuk cek apakah SEMUA user sudah selesai
+        checkAllPeersDone();
         return;
     }
 
-    const file = fileQueue[currentFileIndex];
-    if (!file) return;
+    const file = fileQueue[state.index];
+    const channel = dataChannels[key];
 
-    console.log(`Sending File: ${file.name} (${file.size} bytes)`);
+    if (!channel || channel.readyState !== 'open') return;
 
-    // 1. Kirim Metadata (JSON)
+    // Send Header
     const metadata = JSON.stringify({
-        type: 'meta',
-        name: file.name,
-        size: file.size,
-        mime: file.type
+        type: 'meta', name: file.name, size: file.size, mime: file.type
     });
-    dataChannel.send(metadata);
+    channel.send(metadata);
 
-    // 2. Mulai Kirim Chunk
+    // Send Body
     const reader = new FileReader();
     let offset = 0;
 
     reader.onload = (e) => {
-        if (dataChannel.readyState !== 'open') return;
+        if (channel.readyState !== 'open') return;
 
-        dataChannel.send(e.target.result); // Kirim Chunk ArrayBuffer
+        channel.send(e.target.result);
         offset += e.target.result.byteLength;
 
-        // Update UI Progress
+        // UI Update (Progress Bar Global - ambil rata-rata atau last active)
         const progress = Math.min(100, Math.round((offset / file.size) * 100));
-        if(window.updateFileProgressUI) window.updateFileProgressUI(file.name, progress);
+        if (window.updateFileProgressUI) window.updateFileProgressUI(file.name, progress);
 
-        // Lanjut chunk berikutnya
         if (offset < file.size) {
             readSlice(offset);
         } else {
-            console.log("File Sent Completely");
-            showToast(`Sent: ${file.name}`, 'success');
-            currentFileIndex++;
-            setTimeout(sendCurrentFile, 100); // Kirim file selanjutnya (kasih napas dikit)
+            showToast(`Sent to device`, 'success');
+            // Naikkan index user ini & lanjut
+            state.index++;
+            setTimeout(() => sendFileTo(key), 100);
         }
     };
 
     const readSlice = (o) => {
         const slice = file.slice(o, o + CHUNK_SIZE);
-        // Handle Backpressure (Penting biar browser gak crash)
-        if (dataChannel.bufferedAmount > 10 * 1024 * 1024) { // Max buffer 10MB
-            setTimeout(() => readSlice(o), 100);
-        } else {
-            reader.readAsArrayBuffer(slice);
-        }
+        if (channel.bufferedAmount > 10 * 1024 * 1024) setTimeout(() => readSlice(o), 100);
+        else reader.readAsArrayBuffer(slice);
     };
-
     readSlice(0);
 }
 
+// [FIXED] Fungsi Juri (Cek apakah semua peer selesai)
+function checkAllPeersDone() {
+    const allPeers = Array.from(acceptedPublicKeys);
+
+    if (allPeers.length === 0) return;
+
+    let allFinished = true;
+
+    for (const key of allPeers) {
+        const state = transferStates[key];
+
+        // Jika ada state yang belum ada (belum mulai) atau index < jumlah file
+        if (!state || state.index < fileQueue.length) {
+            allFinished = false;
+            break;
+        }
+    }
+
+    // Jika semua true, tampilkan complete UI
+    if (allFinished) {
+        const statusEl = document.getElementById('transfer-status-text');
+        if (statusEl) statusEl.textContent = "ALL TRANSFERS COMPLETED";
+
+        if (window.showTransferCompleteUI) {
+            setTimeout(() => window.showTransferCompleteUI(), 1000);
+        }
+    }
+}
+
 function handleIncomingData(data) {
-    // KASUS 1: Terima Metadata (String JSON)
     if (typeof data === 'string') {
         try {
             const msg = JSON.parse(data);
             if (msg.type === 'meta') {
-                console.log("Receiving File:", msg.name);
                 incomingFileInfo = msg;
                 incomingFileBuffer = []; // Reset buffer
                 incomingReceivedSize = 0;
 
                 // Update UI: Mulai nerima
-                if(window.updateFileProgressUI) window.updateFileProgressUI(msg.name, 1);
+                if (window.updateFileProgressUI) window.updateFileProgressUI(msg.name, 1);
             }
-        } catch (e) { console.log("Text Data:", data); }
+        } catch (e) { }
         return;
     }
 
@@ -641,42 +739,43 @@ function handleIncomingData(data) {
 
         // Update UI Progress Receiver
         const progress = Math.min(100, Math.round((incomingReceivedSize / incomingFileInfo.size) * 100));
-        if(window.updateFileProgressUI) window.updateFileProgressUI(incomingFileInfo.name, progress);
+        if (window.updateFileProgressUI) window.updateFileProgressUI(incomingFileInfo.name, progress);
 
         // Cek Selesai
         if (incomingReceivedSize >= incomingFileInfo.size) {
             saveReceivedFile(incomingFileInfo, incomingFileBuffer);
             incomingFileInfo = null; // Reset metadata untuk file berikutnya
-            
-            // Cek apakah semua file dalam batch sudah diterima?
-            // Kita bisa cek fileQueue di sisi receiver (diisi saat START_TRANSACTION)
-            // ATAU cukup cek apakah ini file terakhir di queue?
-            
-            // Logika Sederhana:
-            // Increment index file yang diterima
+
             if (typeof receivedFileCount === 'undefined') receivedFileCount = 0;
             receivedFileCount++;
-            
+
             // Update UI status text
             const statusEl = document.getElementById('transfer-status-text');
-            if(statusEl) statusEl.textContent = `Received ${receivedFileCount} files`;
+            if (statusEl) statusEl.textContent = `Received ${receivedFileCount} files`;
 
-             // Jika kita punya info total file dari START_TRANSACTION, kita bisa show complete UI
+            // Jika kita punya info total file dari START_TRANSACTION, kita bisa show complete UI
             if (fileQueue.length > 0 && receivedFileCount >= fileQueue.length) {
-                console.log("[Receiver] All files received.");
-                 if (statusEl) statusEl.textContent = "ALL RECEIVED";
-                if(window.showTransferCompleteUI) setTimeout(() => window.showTransferCompleteUI(), 1000);
+                if (statusEl) statusEl.textContent = "ALL RECEIVED";
+                // Set mode receiver agar UI komponen tau
+                window.isReceiverMode = true;
+                window.lastTransferFiles = fileQueue;
+                if (window.showTransferCompleteUI) setTimeout(() => window.showTransferCompleteUI(), 1000);
             }
         }
     }
 }
 
-let receivedFileCount = 0; // State untuk tracking receiver
-let downloadedFiles = []; // Track downloaded files
+window.receivedFileBlobs = [];
 
 function saveReceivedFile(meta, buffers) {
     const blob = new Blob(buffers, { type: meta.mime || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
+
+    window.receivedFileBlobs.push({
+        name: meta.name,
+        url: url,
+        size: meta.size
+    });
 
     // Auto Download
     const a = document.createElement('a');
@@ -688,20 +787,82 @@ function saveReceivedFile(meta, buffers) {
 
     setTimeout(() => {
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     }, 1000);
 
     // Track downloaded file
-    downloadedFiles.push(meta.name);
-    window.lastDownloadedFiles = downloadedFiles;
+    // downloadedFiles.push(meta.name);
+    // window.lastDownloadedFiles = downloadedFiles;
+    if (!window.lastDownloadedFiles) window.lastDownloadedFiles = [];
+    window.lastDownloadedFiles.push(meta.name);
 
     showToast(`Received: ${meta.name}`, 'success');
 }
 
-// ==========================================
-// EXPOSE GLOBALS
-// ==========================================
-window.startTransferProcess = createNewTransaction;
+// Toggle Download All Received Files
+window.triggerDownloadAll = function () {
+    if (!window.receivedFileBlobs || window.receivedFileBlobs.length === 0) {
+        showToast("No files available to download", "warning");
+        return;
+    }
+
+    showToast("Starting batch download...", "info");
+
+    window.receivedFileBlobs.forEach((file, index) => {
+        setTimeout(() => {
+            const a = document.createElement('a');
+            a.href = file.url;
+            a.download = file.name;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }, index * 500);
+    });
+};
+
+window.endTransferSession = async function () {
+    const prefix = window.location.pathname.includes('/pages/') ? '../' : '';
+    // Determine if we are the sender
+    const was_sender = isInitiatorRole;
+
+    // Reset State
+    if (window.resetTransferState) window.resetTransferState(was_sender);
+
+    // Update role
+    isInitiatorRole = false;
+    sessionStorage.removeItem('gdrop_is_sender');
+    sessionStorage.removeItem('gdrop_sender_name');
+
+    // Revoke Object URLs
+    if (window.receivedFileBlobs) {
+        window.receivedFileBlobs.forEach(f => URL.revokeObjectURL(f.url));
+        window.receivedFileBlobs = [];
+    }
+
+    const progressOverlay = document.getElementById('transfer-progress-overlay');
+    if (progressOverlay) {
+        progressOverlay.classList.add('hidden');
+        progressOverlay.classList.remove('flex');
+    }
+
+    const completeOverlay = document.getElementById('transfer-complete-overlay');
+    if (completeOverlay) completeOverlay.remove();
+
+    if (was_sender) {
+        await window.clearFilesFromDB();
+        window.location.href = `${prefix}index.html`;
+    } else {
+        const statusEl = document.getElementById('transfer-status-text');
+        if (statusEl) statusEl.textContent = "Ready";
+        showToast("Transfer Finished", "info");
+
+        if (fileQueue.length > 0 && window.handleFilesSelected) {
+            window.handleFilesSelected(fileQueue);
+        }
+        window.location.href = `${prefix}index.html`;
+    }
+};
+
 window.setDiscoverable = (isDiscoverable) => {
     sendSignalingMessage(2, isDiscoverable);
 };
@@ -720,81 +881,100 @@ function startNetworkSpeedIndicator() {
         });
     }, 800);
 }
-window.updateNetworkSpeed = (mbps) => { currentSpeedMbps = mbps; };
 
 // ==========================================
 // HELPER: HANDLE FILES FROM UI
 // ==========================================
 window.handleFilesSelected = (files) => {
-    // Convert FileList ke Array biar enak
     fileQueue = Array.from(files);
-    console.log("Files loaded to memory:", fileQueue);
 
-    // Simpan metadata ke session (opsional, buat display aja)
     const meta = fileQueue.map(f => ({ name: f.name, size: f.size, type: f.type }));
     sessionStorage.setItem('gdrop_transfer_files', JSON.stringify(meta));
+
+    const sendBtn = document.getElementById('send-direct-btn');
+
+    if (sendBtn && !sendBtn.classList.contains('pointer-events-none')) {
+        sendBtn.disabled = false;
+    }
 };
 
-// function resetTransferState() {
-//     console.log("[System] Resetting transfer state...");
-//
-//     // 1. Tutup koneksi WebRTC jika masih ada
-//     if (peerConnection) {
-//         peerConnection.close();
-//         peerConnection = null;
-//     }
-//     dataChannel = null;
-//
-//     // 2. Reset ID dan Target
-//     currentTransactionId = null;
-//     pendingTransactionId = null;
-//     targetPublicKey = null;
-//     currentFileIndex = 0;
-//
-//     // 3. Reset Buffer Penerima
-//     incomingFileInfo = null;
-//     incomingFileBuffer = [];
-//     incomingReceivedSize = 0;
-//
-//     // 4. Tutup UI Overlay jika terbuka
-//     const overlay = document.getElementById('transfer-progress-overlay');
-//     if (overlay) {
-//         overlay.classList.add('hidden');
-//         overlay.classList.remove('flex');
-//     }
-// }
+function resetTransferState(clearFiles = false) {
+    if (cooldownInterval) clearInterval(cooldownInterval);
 
-function resetTransferState() {
-    console.log("[System] Clearing all transfer states...");
+    // Clean up peer connections Map
+    Object.values(peerConnections).forEach(pc => {
+        if (pc && pc.connectionState !== 'closed') pc.close();
+    });
 
-    // 1. Matikan WebRTC
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    dataChannel = null;
+    peerConnections = {};
+    dataChannels = {};
+    acceptedPublicKeys.clear();
+    transferStates = {};
 
-    // 2. Reset Variabel ID & Antrian
     currentTransactionId = null;
     pendingTransactionId = null;
-    targetPublicKey = null;
-    currentFileIndex = 0;
-    fileQueue = [];
 
-    // 3. HAPUS SESSION STORAGE (Biar nggak nyangkut pas refresh)
+    incomingFileInfo = null;
+    incomingFileBuffer = [];
+    incomingReceivedSize = 0;
+    receivedFileCount = 0;
+
+    if (clearFiles) {
+        fileQueue = [];
+        sessionStorage.removeItem('gdrop_transfer_files');
+        consecutiveFailures = 0;
+    }
+
     sessionStorage.removeItem('gdrop_transfer_devices');
-    sessionStorage.removeItem('gdrop_transfer_files');
     sessionStorage.removeItem('gdrop_group_name');
 
-    // 4. Tutup Overlay Progress
+    if (window.receivedFileBlobs && isInitiatorRole) {
+        window.receivedFileBlobs.forEach(f => URL.revokeObjectURL(f.url));
+        window.receivedFileBlobs = [];
+    }
+
     const overlay = document.getElementById('transfer-progress-overlay');
     if (overlay) {
         overlay.classList.add('hidden');
         overlay.classList.remove('flex');
     }
+
+    if (!clearFiles) consecutiveFailures++;
+    let secondsLeft = Math.min(3 * consecutiveFailures, 15);
+
+    const sendButtons = ['send-direct-btn', 'send-files-btn'];
+    sendButtons.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('pointer-events-none', 'opacity-50', 'cursor-not-allowed');
+            btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-sm">timer</span> Wait ${secondsLeft}s`;
+        }
+    });
+
+    cooldownInterval = setInterval(() => {
+        secondsLeft--;
+        sendButtons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                if (secondsLeft > 0) {
+                    btn.innerHTML = `<span class="material-symbols-outlined animate-spin text-sm">timer</span> Wait ${secondsLeft}s`;
+                } else {
+                    clearInterval(cooldownInterval);
+                    btn.disabled = false;
+                    btn.classList.remove('pointer-events-none', 'opacity-50', 'cursor-not-allowed');
+                    btn.innerHTML = (id === 'send-direct-btn') ? '<span class="material-symbols-outlined">send</span> Send Now' : '<span class="material-symbols-outlined">send</span> Send Files to Group';
+                }
+            }
+        });
+    }, 1000);
 }
 
-// Expose agar bisa dipanggil dari components.js
+// ==========================================
+// EXPOSE GLOBALS
+// ==========================================
+window.updateNetworkSpeed = (mbps) => { currentSpeedMbps = mbps; };
+window.startTransferProcess = createNewTransaction;
 window.resetTransferState = resetTransferState;
 
 // Run App
