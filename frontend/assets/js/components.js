@@ -63,7 +63,7 @@ function createDeviceCard(device) {
 
     const iconBase = "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl transition-colors";
     const iconStyle = device.checked
-        ? "bg-white text-primary shadow-sm"
+        ? "bg-white dark:bg-slate-800 text-primary shadow-sm"
         : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400";
 
     return `
@@ -772,8 +772,18 @@ function renderMeshNetwork(count) {
     }
 }
 
-window.updateFileProgressUI = function (fileName, percentage) {
+const fileProgressMap = {};
+
+window.updateFileProgressUI = function (fileName, percentage, deviceId = 'general') {
     const safeName = fileName.replace(/[^a-zA-Z0-9]/g, '');
+
+    if (!fileProgressMap[safeName]) fileProgressMap[safeName] = 0;
+
+    if (percentage > fileProgressMap[safeName]) {
+        fileProgressMap[safeName] = percentage;
+    } else {
+        percentage = fileProgressMap[safeName];
+    }
 
     // 1. Update Card File Satuan (Bagian Bawah)
     const statusEl = document.getElementById(`status-${safeName}`);
@@ -810,12 +820,12 @@ window.updateFileProgressUI = function (fileName, percentage) {
     if (mainBar) mainBar.style.width = `${averageProgress}%`;
     if (overallText) overallText.textContent = `${averageProgress}%`;
 
-    // 3. TRIGGER SELESAI (Hanya jika rata-rata sudah 100%)
-    if (averageProgress >= 100) {
-        setTimeout(() => {
-            showTransferCompleteUI(); // Panggil layar completion screen
-        }, 800);
-    }
+    // // 3. TRIGGER SELESAI (Hanya jika rata-rata sudah 100%)
+    // if (averageProgress >= 100) {
+    //     setTimeout(() => {
+    //         showTransferCompleteUI(); // Panggil layar completion screen
+    //     }, 800);
+    // }
 };
 
 function endTransferSession() {
