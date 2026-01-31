@@ -56,6 +56,12 @@ cd gopherdrop
     ```bash
     go run .
     ```
+    
+    Or use the helper script (Recommended):
+
+    Windows: Run ```./run.bat``` (or double-click it)
+
+    Linux/Mac: Run ```make run``` (if Makefile is available)
 
 4.  **Access the app**
 
