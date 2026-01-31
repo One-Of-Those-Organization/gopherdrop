@@ -633,13 +633,66 @@ function setupDataChannel(channel, key) {
     channel.onmessage = (event) => handleIncomingData(event.data);
 }
 
-function sendFileTo(key) {
+// function sendFileTo(key) {
+//     const state = transferStates[key];
+//     if (!state) return;
+
+//     // Cek Queue User Ini
+//     if (state.index >= fileQueue.length) {
+//         // [FIXED] Panggil fungsi Juri untuk cek apakah SEMUA user sudah selesai
+//         checkAllPeersDone();
+//         return;
+//     }
+
+//     const file = fileQueue[state.index];
+//     const channel = dataChannels[key];
+
+//     if (!channel || channel.readyState !== 'open') return;
+
+//     // Send Header
+//     const metadata = JSON.stringify({
+//         type: 'meta', name: file.name, size: file.size, mime: file.type
+//     });
+//     channel.send(metadata);
+
+//     // Send Body
+//     const reader = new FileReader();
+//     let offset = 0;
+
+//     reader.onload = (e) => {
+//         if (channel.readyState !== 'open') return;
+
+//         channel.send(e.target.result);
+//         offset += e.target.result.byteLength;
+
+//         // UI Update (Progress Bar Global - ambil rata-rata atau last active)
+//         const progress = Math.min(100, Math.round((offset / file.size) * 100));
+//         if (window.updateFileProgressUI) window.updateFileProgressUI(file.name, progress);
+
+//         if (offset < file.size) {
+//             readSlice(offset);
+//         } else {
+//             showToast(`Sent to device`, 'success');
+//             // Naikkan index user ini & lanjut
+//             state.index++;
+//             setTimeout(() => sendFileTo(key), 100);
+//         }
+//     };
+
+//     const readSlice = (o) => {
+//         const slice = file.slice(o, o + CHUNK_SIZE);
+//         if (channel.bufferedAmount > 10 * 1024 * 1024) setTimeout(() => readSlice(o), 100);
+//         else reader.readAsArrayBuffer(slice);
+//     };
+//     readSlice(0);
+// }
+
+async function sendFileTo(key) {
     const state = transferStates[key];
     if (!state) return;
 
     // Cek Queue User Ini
     if (state.index >= fileQueue.length) {
-        // [FIXED] Panggil fungsi Juri untuk cek apakah SEMUA user sudah selesai
         checkAllPeersDone();
         return;
     }
@@ -649,45 +702,62 @@ function sendFileTo(key) {
 
     if (!channel || channel.readyState !== 'open') return;
 
-    // Send Header
+    // --- 1. SETUP BATAS AMAN ANTRIAN (64KB) ---
+    const BUFFER_THRESHOLD = 65535;
+    channel.bufferedAmountLowThreshold = BUFFER_THRESHOLD / 2;
+
+    // --- 2. KIRIM METADATA ---
     const metadata = JSON.stringify({
         type: 'meta', name: file.name, size: file.size, mime: file.type
     });
     channel.send(metadata);
 
-    // Send Body
-    const reader = new FileReader();
+    // --- 3. LOOPING CHUNK (GANTI FILEREADER JADI ASYNC LOOP) ---
     let offset = 0;
 
-    reader.onload = (e) => {
-        if (channel.readyState !== 'open') return;
+    try {
+        while (offset < file.size) {
+            // A. CEK REM (BACKPRESSURE)
+            // Kalau antrean penuh (>64KB), kita PAUSE dulu sampai browser bilang "Lanjut"
+            if (channel.bufferedAmount > BUFFER_THRESHOLD) {
+                await new Promise(resolve => {
+                    channel.onbufferedamountlow = () => {
+                        channel.onbufferedamountlow = null;
+                        resolve();
+                    };
+                });
+            }
 
-        channel.send(e.target.result);
-        offset += e.target.result.byteLength;
+            // B. POTONG & BACA CHUNK
+            const chunk = file.slice(offset, offset + CHUNK_SIZE);
+            const buffer = await chunk.arrayBuffer(); // Cara modern baca file
 
-        // UI Update (Progress Bar Global - ambil rata-rata atau last active)
-        const progress = Math.min(100, Math.round((offset / file.size) * 100));
-        if (window.updateFileProgressUI) window.updateFileProgressUI(file.name, progress);
+            // C. KIRIM
+            if (channel.readyState !== 'open') break; // Cek koneksi
+            channel.send(buffer);
 
-        if (offset < file.size) {
-            readSlice(offset);
-        } else {
-            showToast(`Sent to device`, 'success');
-            // Naikkan index user ini & lanjut
-            state.index++;
-            setTimeout(() => sendFileTo(key), 100);
+            offset += buffer.byteLength;
+
+            // D. UPDATE UI
+            const progress = Math.min(100, Math.round((offset / file.size) * 100));
+            if (window.updateFileProgressUI) window.updateFileProgressUI(file.name, progress);
         }
-    };
 
-    const readSlice = (o) => {
-        const slice = file.slice(o, o + CHUNK_SIZE);
-        if (channel.bufferedAmount > 10 * 1024 * 1024) setTimeout(() => readSlice(o), 100);
-        else reader.readAsArrayBuffer(slice);
-    };
-    readSlice(0);
+        // --- 4. SELESAI KIRIM FILE INI ---
+        showToast(`Sent to device`, 'success');
+
+        // Naikkan index & Lanjut ke file berikutnya
+        state.index++;
+
+        // Kasih jeda dikit sebelum file berikutnya biar napas
+        setTimeout(() => sendFileTo(key), 100);
+
+    } catch (err) {
+        console.error("Error sending file:", err);
+        showToast("Transfer error", "error");
+    }
 }
 
-// [FIXED] Fungsi Juri (Cek apakah semua peer selesai)
 function checkAllPeersDone() {
     const allPeers = Array.from(acceptedPublicKeys);
 
