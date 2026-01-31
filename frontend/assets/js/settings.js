@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const deviceNameInput = document.getElementById('device_name');
     if (deviceNameInput) {
         // Take Name from Load Local Storage (Fallback ke 'Unknown Device' jika kosong)
-        const savedName = localStorage.getItem(STORAGE_KEYS.DEVICE_NAME);
+        const savedName = localStorage.getItem(STORAGE_KEYS.DEVICE_NAME) || 'Unknown Device';
 
         originalDeviceName = savedName;
         deviceNameInput.value = savedName;
@@ -29,15 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') {
                 e.preventDefault();
 
-                const isChanged = deviceNameInput.value.trim() !== originalDeviceName;
-                const isNotEmpty = deviceNameInput.value.trim() !== '';
+                const val = deviceNameInput.value.trim();
 
-                if (isChanged && isNotEmpty) {
+                if (val.length > 0) {
                     deviceNameInput.blur();
-                    updateSaveButtonState(savedName)
+                    window.saveConfiguration();
                 }
-
-                if (window.showToast) window.showToast('Name change saved', 'info');
             }
             else if (e.key === 'Escape') {
                 e.preventDefault();
