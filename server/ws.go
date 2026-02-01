@@ -29,6 +29,10 @@ const (
 	START_TRANSACTION        // 10
 	TRANSACTION_SHARE_ACCEPT // 11
 	WEBRTC_SIGNAL            // 12
+
+	USER_INFO                // 13
+	CONFIG_NAME              // 14
+	TRANSACTION_HOST_RECV    // 15
 )
 
 type WSMessage struct {
@@ -42,11 +46,13 @@ type WebRTCSignal struct {
 	Data          any    `json:"data" mapstructure:"data"`
 }
 
-func sendWS(c *websocket.Conn, t WSType, data any) {
+func sendWS(s *Server, c *websocket.Conn, t WSType, data any) {
+	s.WriteMu.Lock();
 	_ = c.WriteJSON(WSMessage{
 		WSType: t,
 		Data:   data,
 	})
+	s.WriteMu.Unlock();
 }
 
 func HandleWS(s *Server, mUser *ManagedUser) {
@@ -61,28 +67,72 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 		}
 
 		switch msg.WSType {
-		case CONFIG_DISCOVERABLE:
-			n, ok := msg.Data.(bool)
+		case CONFIG_NAME:
+			newname, ok := msg.Data.(string)
 			if !ok {
-				sendWS(mUser.Conn, ERROR, "invalid websocket message")
+				sendWS(s, mUser.Conn, ERROR, "invalid websocket message")
 				continue
 			}
 			var user User
 			res := s.DB.Where("public_key = ?", mUser.User.PublicKey).First(&user).Error
 			if res != nil {
-				sendWS(mUser.Conn, ERROR, "invalid public key")
+				sendWS(s, mUser.Conn, ERROR, "invalid public key")
+				continue
+			}
+			user.Username = newname
+			res = s.DB.Save(&user).Error
+			if res != nil {
+				sendWS(s, mUser.Conn, ERROR, "db failed to save your changes")
+				continue
+			}
+
+			s.CachedUserMu.Lock()
+			for _, user := range s.CachedUser {
+				if user.User.PublicKey == mUser.User.PublicKey {
+					s.MUserMu.Lock()
+					user.MinUser.Username = newname;
+					user.User.Username = newname;
+					s.MUserMu.Unlock()
+					break;
+				}
+			}
+			s.CachedUserMu.Unlock()
+			sendWS(s, mUser.Conn, CONFIG_NAME, "success")
+			continue
+		case USER_INFO:
+			sendWS(s, mUser.Conn, USER_INFO, mUser.User)
+			continue
+		case CONFIG_DISCOVERABLE:
+			n, ok := msg.Data.(bool)
+			if !ok {
+				sendWS(s, mUser.Conn, ERROR, "invalid websocket message")
+				continue
+			}
+			var user User
+			res := s.DB.Where("public_key = ?", mUser.User.PublicKey).First(&user).Error
+			if res != nil {
+				sendWS(s, mUser.Conn, ERROR, "invalid public key")
 				continue
 			}
 			user.IsDiscoverable = n
 			res = s.DB.Save(&user).Error
 			if res != nil {
-				sendWS(mUser.Conn, ERROR, "db failed to save your changes")
+				sendWS(s, mUser.Conn, ERROR, "db failed to save your changes")
 				continue
 			}
-			sendWS(mUser.Conn, CONFIG_DISCOVERABLE, "success")
+			s.CachedUserMu.Lock()
+			if n == false {
+				DelCachedUser(s, mUser.User.ID);
+			} else {
+				AddCachedUser(s, mUser)
+			}
+			s.CachedUserMu.Unlock()
+			sendWS(s, mUser.Conn, CONFIG_DISCOVERABLE, "success")
 			continue
 		case START_SHARING:
-			sendWS(mUser.Conn, USER_SHARE_LIST, s.CachedUser)
+			s.CachedUserMu.RLock()
+			sendWS(s, mUser.Conn, USER_SHARE_LIST, s.CachedUser)
+			s.CachedUserMu.RUnlock()
 			continue
 		case NEW_TRANSACTION:
 			txID := uuid.New().String()
@@ -97,24 +147,28 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			s.TransactionMu.Lock()
 			s.Transactions[txID] = transaction
 			s.TransactionMu.Unlock()
-			sendWS(mUser.Conn, USER_SHARE_TARGET, transaction.ID)
+			sendWS(s, mUser.Conn, NEW_TRANSACTION, transaction)
 			continue
 		case INFO_TRANSACTION:
 			n, ok := msg.Data.(string)
 			if !ok {
-				sendWS(mUser.Conn, ERROR, "invalid websocket message")
+				sendWS(s, mUser.Conn, ERROR, "invalid websocket message")
 				continue
 			}
 
 			s.TransactionMu.RLock()
-			sendWS(mUser.Conn, USER_SHARE_TARGET, s.Transactions[n])
+			if s.Transactions[n] == nil {
+				sendWS(s, mUser.Conn, DELETE_TRANSACTION, n)
+				continue
+			}
+			sendWS(s, mUser.Conn, INFO_TRANSACTION, s.Transactions[n])
 			s.TransactionMu.RUnlock()
 			continue
 		case DELETE_TRANSACTION:
 			var valid bool = true
 			n, ok := msg.Data.(string)
 			if !ok {
-				sendWS(mUser.Conn, ERROR, "invalid websocket message")
+				sendWS(s, mUser.Conn, ERROR, "invalid websocket message")
 				continue
 			}
 
@@ -122,7 +176,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 
 			s.TransactionMu.Lock()
 
-			if mUser.MinUser.PublicKey == s.Transactions[n].Sender.MinUser.PublicKey {
+			if s.Transactions[n] != nil && mUser.MinUser.PublicKey == s.Transactions[n].Sender.MinUser.PublicKey {
 				for _, user := range s.Transactions[n].Targets {
 					target = append(target, user.User)
 				}
@@ -136,10 +190,10 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			if valid {
 				s.TransactionMu.RLock()
 
-				for _, user := range target {
-					sendWS(user.Conn, USER_SHARE_TARGET, n)
+				for _, t := range target {
+					sendWS(s, t.Conn, DELETE_TRANSACTION, n)
 				}
-				sendWS(mUser.Conn, USER_SHARE_TARGET, n)
+				sendWS(s, mUser.Conn, DELETE_TRANSACTION, n)
 
 				s.TransactionMu.RUnlock()
 			}
@@ -151,7 +205,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			}
 
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
-				sendWS(mUser.Conn, ERROR, "invalid data for USER_SHARE_TARGET")
+				sendWS(s, mUser.Conn, ERROR, "invalid data for USER_SHARE_TARGET")
 				continue
 			}
 
@@ -160,12 +214,12 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			s.TransactionMu.RUnlock()
 
 			if !exists || tx == nil {
-				sendWS(mUser.Conn, ERROR, "transaction not found or expired")
+				sendWS(s, mUser.Conn, ERROR, "transaction not found or expired")
 				continue
 			}
 
 			if mUser.User.PublicKey != tx.Sender.User.PublicKey {
-				sendWS(mUser.Conn, ERROR, "not authorized to modify this transaction")
+				sendWS(s, mUser.Conn, ERROR, "not authorized to modify this transaction")
 				continue
 			}
 
@@ -182,7 +236,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			s.MUserMu.RUnlock()
 
 			if len(targets) == 0 {
-				sendWS(mUser.Conn, ERROR, "no valid target users found")
+				sendWS(s, mUser.Conn, ERROR, "no valid target users found")
 				continue
 			}
 
@@ -195,7 +249,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			// Notify targets
 			s.TransactionMu.RLock()
 			for _, target := range targets {
-				sendWS(target.User.Conn, TRANSACTION_SHARE_ACCEPT, struct {
+				sendWS(s, target.User.Conn, TRANSACTION_SHARE_ACCEPT, struct {
 					Transaction *Transaction `json:"transaction"`
 					Sender      string       `json:"sender"`
 				}{
@@ -204,7 +258,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				})
 			}
 
-			sendWS(mUser.Conn, USER_SHARE_TARGET, tx)
+			sendWS(s, mUser.Conn, USER_SHARE_TARGET, tx)
 			s.TransactionMu.RUnlock()
 			continue
 		case FILE_SHARE_TARGET:
@@ -213,12 +267,12 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				Files         []FileInfo `mapstructure:"files"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
-				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_TARGET")
+				sendWS(s, mUser.Conn, ERROR, "invalid data for FILE_SHARE_TARGET")
 				continue
 			}
 
 			if data.TransactionID == "" || len(data.Files) == 0 {
-				sendWS(mUser.Conn, ERROR, "missing transaction_id or files")
+				sendWS(s, mUser.Conn, ERROR, "missing transaction_id or files")
 				continue
 			}
 
@@ -227,12 +281,12 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			s.TransactionMu.RUnlock()
 
 			if !ok {
-				sendWS(mUser.Conn, ERROR, "transaction not found")
+				sendWS(s, mUser.Conn, ERROR, "transaction not found")
 				continue
 			}
 
 			if transaction.Sender != mUser {
-				sendWS(mUser.Conn, ERROR, "not authorized to modify this transaction")
+				sendWS(s, mUser.Conn, ERROR, "not authorized to modify this transaction")
 				continue
 			}
 
@@ -246,7 +300,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			transaction.Files = files
 			s.TransactionMu.Unlock()
 
-			sendWS(mUser.Conn, FILE_SHARE_TARGET, "files added to transaction")
+			sendWS(s, mUser.Conn, FILE_SHARE_TARGET, "files added to transaction")
 			continue
 		case TRANSACTION_SHARE_ACCEPT:
 			var data struct {
@@ -254,7 +308,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				Accept        bool   `mapstructure:"accept"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
-				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_ACCEPT")
+				sendWS(s, mUser.Conn, ERROR, "invalid data for FILE_SHARE_ACCEPT")
 				continue
 			}
 
@@ -263,7 +317,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			tx, ok := s.Transactions[data.TransactionID]
 			if !ok {
 				s.TransactionMu.Unlock()
-				sendWS(mUser.Conn, ERROR, "transaction not found")
+				sendWS(s, mUser.Conn, ERROR, "transaction not found")
 				continue
 			}
 
@@ -278,12 +332,12 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				}
 			}
 
-			sendWS(mUser.Conn, TRANSACTION_SHARE_ACCEPT, "response recorded")
+			sendWS(s, mUser.Conn, TRANSACTION_SHARE_ACCEPT, "response recorded")
 
 			// Notify sender about the response (both accept and decline)
 			if data.Accept {
 				// Notify sender about acceptance
-				sendWS(tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
+				sendWS(s, tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
 					Type          string `json:"type"`
 					Username      string `json:"username"`
 					Accepted      bool   `json:"accepted"`
@@ -296,7 +350,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				})
 			} else {
 				// Notify sender about decline
-				sendWS(tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
+				sendWS(s, tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
 					Type          string `json:"type"`
 					Username      string `json:"username"`
 					Declined      bool   `json:"declined"`
@@ -316,7 +370,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				TransactionID string `mapstructure:"transaction_id"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
-				sendWS(mUser.Conn, ERROR, "invalid data for START_TRANSACTION")
+				sendWS(s, mUser.Conn, ERROR, "invalid data for START_TRANSACTION")
 				continue
 			}
 			s.TransactionMu.Lock()
@@ -324,13 +378,13 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			tx, ok := s.Transactions[data.TransactionID]
 			if !ok {
 				s.TransactionMu.Unlock()
-				sendWS(mUser.Conn, ERROR, "transaction not found")
+				sendWS(s, mUser.Conn, ERROR, "transaction not found")
 				continue
 			}
 
 			if tx.Sender != mUser {
 				s.TransactionMu.Unlock()
-				sendWS(mUser.Conn, ERROR, "not authorized to start this transaction")
+				sendWS(s, mUser.Conn, ERROR, "not authorized to start this transaction")
 				continue
 			}
 
@@ -354,15 +408,40 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			}
 
 			for _, target := range tx.Targets {
-				sendWS(target.User.Conn, START_TRANSACTION, payload)
+				sendWS(s, target.User.Conn, START_TRANSACTION, payload)
 			}
-			sendWS(mUser.Conn, START_TRANSACTION, "transaction started")
+			sendWS(s, mUser.Conn, START_TRANSACTION, "transaction started")
 			s.TransactionMu.Unlock()
+			continue
+		case TRANSACTION_HOST_RECV:
+			var data struct {
+				TransactionID string `mapstructure:"transaction_id"`
+			}
+			if err := mapstructure.Decode(msg.Data, &data); err != nil {
+				sendWS(s, mUser.Conn, ERROR, "invalid data for TRANSACTION_HOST_RECV")
+				continue
+			}
+			s.TransactionMu.Lock()
+
+			tx, ok := s.Transactions[data.TransactionID]
+			if !ok {
+				s.TransactionMu.Unlock()
+				sendWS(s, mUser.Conn, ERROR, "transaction not found")
+				continue
+			}
+
+			if tx.Sender != mUser {
+				s.TransactionMu.Unlock()
+				sendWS(s, mUser.Conn, ERROR, "not authorized to get this transaction")
+				continue
+			}
+
+			sendWS(s, mUser.Conn, TRANSACTION_HOST_RECV, tx.Targets)
 			continue
 		case WEBRTC_SIGNAL:
 			var signal WebRTCSignal
 			if err := mapstructure.Decode(msg.Data, &signal); err != nil {
-				sendWS(mUser.Conn, ERROR, "invalid data for START_TRANSACTION")
+				sendWS(s, mUser.Conn, ERROR, "invalid data for START_TRANSACTION")
 				continue
 			}
 			var targetUser *ManagedUser
@@ -375,10 +454,10 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			}
 			s.MUserMu.RUnlock()
 			if targetUser == nil {
-				sendWS(mUser.Conn, ERROR, "target user not found or not connected")
+				sendWS(s, mUser.Conn, ERROR, "target user not found or not connected")
 				continue
 			}
-			sendWS(targetUser.Conn, WEBRTC_SIGNAL, struct {
+			sendWS(s, targetUser.Conn, WEBRTC_SIGNAL, struct {
 				TransactionID string `json:"transaction_id"`
 				FromKey       string `json:"from_key"`
 				Data          any    `json:"data"`
