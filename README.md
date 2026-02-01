@@ -52,7 +52,12 @@ cd gopherdrop
     go mod tidy
     ```
 
-3.  **Run the backend**
+3.  **Create DB Path**
+    ```bash
+    mkdir db/
+    ```
+
+4.  **Run the backend**
     ```bash
     go run .
     ```
@@ -63,12 +68,12 @@ cd gopherdrop
 
     Linux/Mac: Run ```make run``` (if Makefile is available)
 
-4.  **Access the app**
+5.  **Access the app**
 
     Open your browser and navigate to:
     http://localhost:8080
 
-5. **Expose to network (optional)**
+6. **Expose to network (optional)**
 
     To allow other devices to connect, use **ngrok** or expose your local IP:
     ```bash
