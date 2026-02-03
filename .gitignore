@@ -101,3 +101,6 @@ Desktop.ini
 logs/
 tmp/
 temp/
+gopherdrop
+.vercel
+.env*.local

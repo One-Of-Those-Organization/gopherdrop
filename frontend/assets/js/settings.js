@@ -178,7 +178,6 @@ window.saveConfiguration = async function (isRetry = false) {
 
             // Handle Token Expired (401) - Retry Logic
             if (response.status === 401 && !isRetry) {
-                console.warn("Token expired, refreshing auth...");
                 localStorage.removeItem(STORAGE_KEYS.TOKEN);
                 const newToken = await initAuth();
                 if (!newToken) throw new Error("Re-auth failed.");
