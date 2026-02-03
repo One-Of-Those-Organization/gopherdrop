@@ -156,7 +156,27 @@ function addMoreFiles() {
 
 function handleFilesAdded(files) {
     if (!files || files.length === 0) return;
-    const newFiles = Array.from(files).map(f => ({
+    
+    // Filter out empty files
+    const validFiles = Array.from(files).filter(f => {
+        if (f.size === 0) {
+            if (window.showToast) {
+                window.showToast(`❌ "${f.name}" is empty and will be skipped`, 'warning');
+            }
+            return false;
+        }
+        return true;
+    });
+    
+    if (validFiles.length === 0) {
+        if (window.showToast) {
+            window.showToast('No valid files to add', 'error');
+        }
+        document.getElementById('add-files-input').value = '';
+        return;
+    }
+    
+    const newFiles = validFiles.map(f => ({
         name: f.name,
         size: f.size,
         type: f.type,
@@ -305,3 +325,63 @@ function getFileIcon(type) {
     if (type.includes('sheet') || type.includes('excel')) return 'table_chart';
     return 'draft';
 }
+
+// Toast notification function for transfer-review page
+let toastTimeoutId;
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'fixed top-10 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-3 pointer-events-none items-center';
+        document.body.appendChild(container);
+    }
+    
+    // Replace previous toast
+    container.innerHTML = '';
+    if (toastTimeoutId) clearTimeout(toastTimeoutId);
+    
+    const toast = document.createElement('div');
+    
+    const configs = {
+        success: { icon: 'check_circle', bg: 'bg-white dark:bg-slate-800', border: 'border-green-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-green-500' },
+        error: { icon: 'error', bg: 'bg-white dark:bg-slate-800', border: 'border-red-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-red-500' },
+        warning: { icon: 'warning', bg: 'bg-white dark:bg-slate-800', border: 'border-yellow-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-yellow-500' },
+        info: { icon: 'info', bg: 'bg-white dark:bg-slate-800', border: 'border-blue-500', text: 'text-slate-800 dark:text-white', iconColor: 'text-blue-500' }
+    };
+    
+    const cfg = configs[type] || configs.info;
+    
+    toast.className = `pointer-events-auto flex items-center gap-4 px-5 py-4 rounded-2xl shadow-xl border-l-4 ${cfg.border} ${cfg.bg} transform transition-all duration-500 -translate-y-10 opacity-0 min-w-[320px]`;
+    
+    toast.innerHTML = `
+        <span class="material-symbols-outlined text-2xl ${cfg.iconColor}">${cfg.icon}</span>
+        <div class="flex flex-col flex-1">
+            <span class="font-bold text-[10px] uppercase tracking-wider opacity-60 ${cfg.text}">${type}</span>
+            <span class="font-bold text-sm ${cfg.text}">${message}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded-full transition-colors">
+            <span class="material-symbols-outlined text-lg">close</span>
+        </button>
+    `;
+    
+    container.appendChild(toast);
+    
+    requestAnimationFrame(() => {
+        toast.classList.remove('-translate-y-10', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+    });
+    
+    toastTimeoutId = setTimeout(() => {
+        if (toast) {
+            toast.classList.remove('translate-y-0', 'opacity-100');
+            toast.classList.add('-translate-y-10', 'opacity-0');
+            setTimeout(() => {
+                if (toast.parentElement) toast.remove();
+            }, 500);
+        }
+    }, 4000);
+}
+
+window.showToast = showToast;
