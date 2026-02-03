@@ -6,6 +6,15 @@ GopherDrop is a modern, high-performance peer-to-peer (P2P) file sharing applica
 
 While GopherDrop is optimized for reliable, low-latency transfers within a Local Area Network (LAN), it also includes best-effort support for cross-network connectivity using STUN for NAT traversal.
 
+## 👥 Team Members (Kelompok GopherDrop)
+* **Federico Matthew Pratama** - 233405001 (Lead Frontend)
+* **Fernando Perry** - 233406005 (Lead Backend)
+* **Elisa Bayu Hendra** - 233401015
+* **Yohanes Emmanuel Putra Sutanto** - 233401017
+* **Vincentius Johanes Lwie Jaya** - 233408010
+
+---
+
 ## ✨ Key Features
 
 * **⚡ Direct P2P Transfer:** Uses WebRTC Data Channels to send files directly between devices without storing them on a server.
@@ -18,6 +27,8 @@ While GopherDrop is optimized for reliable, low-latency transfers within a Local
     * **LAN/WLAN:** 100% reliable high-speed transfer on local networks.
     * **Internet (WAN):** Best-effort connectivity via public STUN servers. *(Note: Works on most networks, but may fail behind strict Symmetric NATs as no TURN relay is currently implemented).*
 * **📱 Platform Independent:** Fully web-based (PWA ready). Works on Chrome, Edge, Firefox, and mobile browsers without installation.
+
+---
 
 ## 🛠️ Tech Stack
 
@@ -32,6 +43,8 @@ While GopherDrop is optimized for reliable, low-latency transfers within a Local
 * **Gorilla WebSocket**
 * **Net/HTTP**
 
+===
+
 ## 🚀 How It Works
 
 1.  **Discovery:** Devices connect to the Go signaling server via WebSocket to broadcast their presence (`public_key` & `username`).
@@ -39,11 +52,13 @@ While GopherDrop is optimized for reliable, low-latency transfers within a Local
 3.  **Transfer:** Once the P2P connection is established, the WebSocket connection is bypassed. File chunks are sent directly via the WebRTC Data Channel.
 4.  **Completion:** The receiver reassembles the chunks into a Blob and triggers an automatic download.
 
+---
+
 ## 📦 Installation & Setup
 
 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/gopherdrop.git
+git clone https://github.com/One-Of-Those-Organization/gopherdrop.git
 cd gopherdrop
 ```
 
@@ -79,6 +94,8 @@ cd gopherdrop
     ```bash
     ngrok http 8080
     ```
+
+---
 
 ## ⚠️ Limitations
 
