@@ -72,17 +72,26 @@ func InitServer(url string, password string) *Server {
 	app := fiber.New(fiber.Config{
 		AppName: "GopherDrop Backend Ow0",
 	})
+
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "*",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowOriginsFunc: func(origin string) bool {
+			return origin == "https://dev-gopherdrop.vercel.app" ||
+				origin == "http://localhost:3000" ||
+				origin == "http://localhost:5173"
+		},
+		AllowCredentials: true,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Upgrade, Connection, ngrok-skip-browser-warning",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
-		AllowCredentials: false,
 	}))
+
+	app.Options("/*", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
 
 	return &Server{
 		App:          app,
 		Url:          url,
-		DB:           nil, // Will be set by main.go
+		DB:           nil,
 		Pass:         password,
 		Challenges:   make(map[string]time.Time),
 		MUser:        make(map[*websocket.Conn]*ManagedUser),
@@ -91,8 +100,10 @@ func InitServer(url string, password string) *Server {
 }
 
 func (s *Server) StartServer() {
-	log.Printf("Server started at: %s\n", s.Url)
-	s.App.Listen(s.Url)
+	log.Printf("Server starting at: %s\n", s.Url)
+	if err := s.App.Listen(s.Url); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func StartJanitor(s *Server) {

@@ -734,10 +734,17 @@ function sendFilesToGroup() {
         return;
     }
 
+    // Check if actual files exist in fileQueue (source of truth)
+    const hasActualFiles = window.getFileQueueLength && window.getFileQueueLength() > 0;
     const filesData = sessionStorage.getItem('gdrop_transfer_files');
-    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+    const hasStoredMeta = filesData && JSON.parse(filesData).length > 0;
 
-    if (!hasFiles) {
+    // If sessionStorage has files but fileQueue is empty, it's stale data
+    if (hasStoredMeta && !hasActualFiles) {
+        sessionStorage.removeItem('gdrop_transfer_files');
+    }
+
+    if (!hasActualFiles) {
         showGroupFileUploadModal(group);
         return;
     }

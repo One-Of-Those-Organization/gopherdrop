@@ -171,12 +171,43 @@ function toggleDeviceSelection(deviceId) {
     if (device) {
         device.checked = !device.checked;
         renderDevicesWithPagination();
+        // updateSelectedDeviceCounter();
     }
 }
 
 function getSelectedDevices() {
     return window.currentDevices.filter(d => d.checked);
 }
+
+// // Update selected device counter badge
+// function updateSelectedDeviceCounter() {
+//     const selectedDevices = getSelectedDevices();
+//     const count = selectedDevices.length;
+
+//     // Update counter badge if it exists
+//     let counterBadge = document.getElementById('selected-device-counter');
+
+//     if (count > 0) {
+//         // Create badge if it doesn't exist
+//         if (!counterBadge) {
+//             counterBadge = document.createElement('div');
+//             counterBadge.id = 'selected-device-counter';
+//             counterBadge.className = 'fixed bottom-20 lg:bottom-8 right-4 lg:right-8 bg-primary text-white px-5 py-3 rounded-full shadow-lg shadow-primary/30 flex items-center gap-2 z-40 animate-bounce';
+//             document.body.appendChild(counterBadge);
+//         }
+
+//         counterBadge.innerHTML = `
+//             <span class="material-symbols-outlined text-xl">check_circle</span>
+//             <span class="font-bold">${count} device${count > 1 ? 's' : ''} selected</span>
+//         `;
+//         counterBadge.style.display = 'flex';
+//     } else {
+//         // Hide badge when no devices selected
+//         if (counterBadge) {
+//             counterBadge.style.display = 'none';
+//         }
+//     }
+// }
 
 // ==========================================
 // Modal & Group Logic
@@ -251,11 +282,17 @@ function sendToExistingGroup(groupId) {
         return;
     }
 
-    // Check if files are selected
+    // Check if actual files exist in fileQueue (source of truth)
+    const hasActualFiles = window.getFileQueueLength && window.getFileQueueLength() > 0;
     const filesData = sessionStorage.getItem('gdrop_transfer_files');
-    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+    const hasStoredMeta = filesData && JSON.parse(filesData).length > 0;
 
-    if (!hasFiles) {
+    // If sessionStorage has files but fileQueue is empty, it's stale data
+    if (hasStoredMeta && !hasActualFiles) {
+        sessionStorage.removeItem('gdrop_transfer_files');
+    }
+
+    if (!hasActualFiles) {
         // Show file upload prompt
         showFileUploadPrompt(() => {
             // Continue with sending after files selected
@@ -318,11 +355,17 @@ function confirmCreateGroup() {
 
     const selectedDevices = getSelectedDevices();
 
-    // Check if files are selected
+    // Check if actual files exist in fileQueue (source of truth)
+    const hasActualFiles = window.getFileQueueLength && window.getFileQueueLength() > 0;
     const filesData = sessionStorage.getItem('gdrop_transfer_files');
-    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+    const hasStoredMeta = filesData && JSON.parse(filesData).length > 0;
 
-    if (!hasFiles) {
+    // If sessionStorage has files but fileQueue is empty, it's stale data
+    if (hasStoredMeta && !hasActualFiles) {
+        sessionStorage.removeItem('gdrop_transfer_files');
+    }
+
+    if (!hasActualFiles) {
         // Show file upload prompt
         showFileUploadPrompt(() => {
             // Callback after file upload - continue with group creation
@@ -526,12 +569,86 @@ function showToast(message, type = 'info') {
 }
 
 // ==========================================
+// Desktop Notification
+// ==========================================
+
+let notificationPermission = null;
+
+// Request notification permission on page load (only once)
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        return false;
+    }
+
+    if (Notification.permission === 'granted') {
+        notificationPermission = 'granted';
+        return true;
+    }
+
+    if (Notification.permission !== 'denied') {
+        try {
+            const permission = await Notification.requestPermission();
+            notificationPermission = permission;
+            return permission === 'granted';
+        } catch (error) {
+            console.error('Error requesting notification permission:', error);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+// Show desktop notification (only for important events)
+function showDesktopNotification(title, body, icon = null) {
+    // Only show if granted and browser supports it
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+        return;
+    }
+
+    try {
+        const notification = new Notification(title, {
+            body: body,
+            icon: icon || './assets/img/logo.png',
+            badge: './assets/img/logo.png',
+            tag: 'gopherdrop-notification', // Replace previous notifications with same tag
+            requireInteraction: false,
+            silent: false
+        });
+
+        // Auto close after 5 seconds
+        setTimeout(() => notification.close(), 5000);
+
+        // Focus window when clicked
+        notification.onclick = function () {
+            window.focus();
+            notification.close();
+        };
+    } catch (error) {
+        console.error('Error showing notification:', error);
+    }
+}
+
+// Initialize notification permission state on page load
+document.addEventListener('DOMContentLoaded', () => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        notificationPermission = 'granted';
+    }
+});
+
+// ==========================================
 // Incoming Request UI Logic
 // ==========================================
 
 function showIncomingModal(senderName, files) {
     const modal = document.getElementById('incoming-request-modal');
     if (!modal) return;
+
+    // Show desktop notification for incoming transfer
+    showDesktopNotification(
+        '📥 Incoming File Transfer',
+        `${senderName} wants to send you ${files.length} file(s)`
+    );
 
     // 1. Update Nama & Jumlah
     document.getElementById('incoming-sender').textContent = senderName;
@@ -594,28 +711,35 @@ function closeIncomingModal() {
 // Transfer Progress UI Logic (Dynamic Loading)
 // ==========================================
 
-async function loadTransferProgressView() {
-    let overlay = document.getElementById('transfer-progress-overlay');
+async function loadTransferProgressView(transactionId) {
+    const overlayId = transactionId
+        ? `transfer-progress-overlay-${transactionId}`
+        : 'transfer-progress-overlay';
+
+    let overlay = document.getElementById(overlayId);
     if (overlay) return overlay;
 
     try {
-        const response = await fetch('pages/transfer-progress.html');
+        // Determine correct path based on current page location
+        const isInPagesFolder = window.location.pathname.includes('/pages/');
+        const progressPath = isInPagesFolder ? 'transfer-progress.html' : 'pages/transfer-progress.html';
+
+        const response = await fetch(progressPath);
         if (!response.ok) throw new Error("Failed to load transfer page");
 
         const html = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        // Extract content from body
         const nav = doc.querySelector('nav');
         const main = doc.querySelector('main');
 
         if (!nav || !main) throw new Error("Invalid page structure");
 
-        // Create overlay container
         overlay = document.createElement('div');
-        overlay.id = 'transfer-progress-overlay';
+        overlay.id = overlayId;
         overlay.className = 'fixed inset-0 z-[100] bg-slate-50 dark:bg-slate-900 flex flex-col transition-all duration-300 font-sans';
+        overlay.setAttribute('data-transaction-id', transactionId);
 
         // Inject content
         overlay.appendChild(nav.cloneNode(true));
@@ -628,45 +752,53 @@ async function loadTransferProgressView() {
 
         return overlay;
     } catch (e) {
+        console.error("Failed to load transfer UI:", e);
         return null;
     }
 }
 
-async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
+async function showTransferProgressUI(files, deviceCount, isReceiver = false, transactionId = null) {
     // Save state for completion screen
     window.lastTransferFiles = files;
     window.transferStartTime = Date.now();
     window.transferRecipientCount = deviceCount;
-    window.isReceiverMode = isReceiver; // Save for completion screen
+    window.isReceiverMode = isReceiver;
 
-    // 1. Ensure view is loaded
-    let overlay = document.getElementById('transfer-progress-overlay');
+    let overlay = await loadTransferProgressView(transactionId);
     if (!overlay) {
-        overlay = await loadTransferProgressView();
-        if (!overlay) {
-            alert("Failed to load transfer UI");
-            return;
-        }
+        alert("Failed to load transfer UI");
+        return;
     }
 
-    // --- LOGIC RESET UNTUK TOP BAR (Biar gak dianggurin) ---
-    const overallText = document.getElementById('overall-percentage');
+    // Show overlay
+    overlay.style.display = 'flex';
+    overlay.classList.remove('hidden');
+
+    // --- LOGIC RESET UNTUK TOP BAR ---
+    const overallText = overlay.querySelector('#overall-percentage');
     if (overallText) overallText.textContent = "0%";
-    const mainBar = document.getElementById('main-progress-bar');
+    const mainBar = overlay.querySelector('#main-progress-bar');
     if (mainBar) mainBar.style.width = "0%";
-    // -------------------------------------------------------
 
     // 2. Update Text Header & Save Device Name
-    const peerName = (!isReceiver && (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name')))
-        ? (window.selectedDeviceName || sessionStorage.getItem('gdrop_group_name'))
-        : (isReceiver ? (window.senderDeviceName || "Sender") : "Device"); // Use sender name for receiver
+    let peerName = "Device";
 
-    window.peerDeviceName = peerName; // Save for completion screen
+    if (isReceiver) {
+        peerName = window.senderDeviceName || "Unknown Sender";
+    } else {
+        // Jika sender, coba ambil nama target device dari selected/group
+        const groupName = sessionStorage.getItem('gdrop_group_name');
+        if (window.selectedDeviceName) peerName = window.selectedDeviceName;
+        else if (groupName) peerName = groupName;
+        else if (deviceCount > 1) peerName = `${deviceCount} Devices`;
+        else peerName = "Recipient";
+    }
+
+    window.peerDeviceName = peerName;
 
     const actionText = isReceiver ? "Receiving" : "Sending";
     const subText = isReceiver ? "Receiving from" : "Transferring to";
 
-    // Update specific text spans (Adaptive UI)
     const actionTextEl = overlay.querySelector('#transfer-action-text');
     const directionTextEl = overlay.querySelector('#transfer-direction-text');
     const recipientCountEl = overlay.querySelector('#recipient-count');
@@ -674,13 +806,8 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
     if (actionTextEl) actionTextEl.textContent = actionText;
     if (directionTextEl) directionTextEl.textContent = subText;
 
-    // For Sender: Display Target Name. For Receiver: Display Count or Sender Name if avail.
     if (recipientCountEl) {
-        if (!isReceiver && peerName && peerName !== "Device") {
-            recipientCountEl.textContent = peerName;
-        } else {
-            recipientCountEl.textContent = `${deviceCount || 1} devices`;
-        }
+        recipientCountEl.textContent = peerName;
     }
 
     // Update numeric values
@@ -688,13 +815,23 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
     if (badgeEl) badgeEl.textContent = `${files.length} files`;
 
     // 3. Render Queue (Card Style)
-    const queueContainer = document.getElementById('transfer-queue');
+    const queueContainer = overlay.querySelector('#transfer-queue');
     if (queueContainer) {
         queueContainer.innerHTML = files.map(file => {
             let icon = 'draft';
             let color = 'text-slate-400 bg-slate-100 dark:bg-slate-700/50';
-            if (file.type && file.type.includes('image')) { icon = 'image'; color = 'text-blue-500 bg-blue-50 dark:bg-blue-900/20'; }
-            else if (file.type && file.type.includes('pdf')) { icon = 'picture_as_pdf'; color = 'text-red-500 bg-red-50 dark:bg-red-900/20'; }
+
+            // Safety check for file type
+            const fType = file.type || '';
+
+            if (fType.includes('image')) {
+                icon = 'image';
+                color = 'text-blue-500 bg-blue-50 dark:bg-blue-900/20';
+            }
+            else if (fType.includes('pdf')) {
+                icon = 'picture_as_pdf';
+                color = 'text-red-500 bg-red-50 dark:bg-red-900/20';
+            }
 
             const safeID = file.name.replace(/[^a-zA-Z0-9]/g, '');
             return `
@@ -716,17 +853,24 @@ async function showTransferProgressUI(files, deviceCount, isReceiver = false) {
         }).join('');
     }
 
-    // 3. Render Mesh
-    renderMeshNetwork(deviceCount || 1);
+    // 4. Render Mesh
+    const meshContainer = overlay.querySelector('#mesh-network-view');
+    if (meshContainer) {
+        renderMeshNetwork(deviceCount || 1, meshContainer);
+    }
 
     overlay.classList.remove('hidden');
     overlay.classList.add('flex');
 }
 
 // Fungsi Pembantu Render Mesh
-function renderMeshNetwork(count) {
-    const container = document.getElementById('mesh-network-view');
-    if (!container) return;
+function renderMeshNetwork(count, container = null) {
+    if (!container) {
+        container = document.getElementById('mesh-network-view');
+    }
+    if (!container) {
+        return;
+    }
 
     // Hapus satelit lama (sisakan center node)
     const oldNodes = container.querySelectorAll('.mesh-node, .connection-line');
@@ -774,7 +918,7 @@ function renderMeshNetwork(count) {
 
 const fileProgressMap = {};
 
-window.updateFileProgressUI = function (fileName, percentage, deviceId = 'general') {
+window.updateFileProgressUI = function (fileName, percentage, deviceId = 'general', overallProgress = null, etaSeconds = null) {
     const safeName = fileName.replace(/[^a-zA-Z0-9]/g, '');
 
     if (!fileProgressMap[safeName]) fileProgressMap[safeName] = 0;
@@ -803,25 +947,43 @@ window.updateFileProgressUI = function (fileName, percentage, deviceId = 'genera
     if (percentEl) percentEl.textContent = `${Math.round(percentage)}%`;
     if (barEl) barEl.style.width = `${percentage}%`;
 
-    // 2. UPDATE TOP BAR (Agar Gak Dianggurin)
-    // Ambil semua persentase file yang ada di layar, lalu hitung rata-ratanya
-    const allPercentEls = document.querySelectorAll('[id^="percent-"]');
-    let total = 0;
-    allPercentEls.forEach(el => {
-        total += parseInt(el.textContent) || 0;
-    });
-
-    const averageProgress = Math.round(total / (allPercentEls.length || 1));
-
-    // Update Progress Bar Besar di Atas (Miro Gambar 4)
+    // 2. UPDATE TOP BAR with Overall Progress and ETA
     const mainBar = document.getElementById('main-progress-bar');
     const overallText = document.getElementById('overall-percentage');
 
-    if (mainBar) mainBar.style.width = `${averageProgress}%`;
-    if (overallText) overallText.textContent = `${averageProgress}%`;
+    // Use overall progress if provided, otherwise calculate average
+    let progressToShow;
+    if (overallProgress !== null) {
+        progressToShow = overallProgress;
+    } else {
+        // Fallback to average calculation
+        const allPercentEls = document.querySelectorAll('[id^="percent-"]');
+        let total = 0;
+        allPercentEls.forEach(el => {
+            total += parseInt(el.textContent) || 0;
+        });
+        progressToShow = Math.round(total / (allPercentEls.length || 1));
+    }
+
+    if (mainBar) mainBar.style.width = `${progressToShow}%`;
+
+    // Update overall text with ETA
+    if (overallText) {
+        let displayText = `${progressToShow}%`;
+        if (etaSeconds !== null && etaSeconds > 0 && progressToShow < 100) {
+            const minutes = Math.floor(etaSeconds / 60);
+            const seconds = etaSeconds % 60;
+            if (minutes > 0) {
+                displayText += ` • ${minutes}m ${seconds}s remaining`;
+            } else {
+                displayText += ` • ${seconds}s remaining`;
+            }
+        }
+        overallText.textContent = displayText;
+    }
 
     // // 3. TRIGGER SELESAI (Hanya jika rata-rata sudah 100%)
-    // if (averageProgress >= 100) {
+    // if (progressToShow >= 100) {
     //     setTimeout(() => {
     //         showTransferCompleteUI(); // Panggil layar completion screen
     //     }, 800);
@@ -907,32 +1069,191 @@ function initFileUpload() {
 
 // 4. Central File Handler
 function handleFiles(files) {
+    // Filter out empty files
+    const validFiles = Array.from(files).filter(file => {
+        if (file.size === 0) {
+            if (window.showToast) window.showToast(`❌ "${file.name}" is empty and will be skipped`, 'warning');
+            return false;
+        }
+        return true;
+    });
+
+    if (validFiles.length === 0) {
+        if (window.showToast) window.showToast('No valid files selected', 'error');
+        return;
+    }
 
     // Kirim ke App.js
     if (window.handleFilesSelected) {
-        window.handleFilesSelected(files);
+        window.handleFilesSelected(validFiles);
 
         // Save to IndexedDB for persistence
         if (window.saveFilesToDB) {
-            window.saveFilesToDB(Array.from(files)).then(() => {
+            window.saveFilesToDB(validFiles).then(() => {
             }).catch(err => {
             });
         }
 
         // UI Feedback
-        if (window.showToast) window.showToast(`${files.length} files READY to send!`, 'success');
+        if (window.showToast) window.showToast(`${validFiles.length} files READY to send!`, 'success');
 
         // Update Teks di Kotak Upload
         const titleEl = document.querySelector('#upload-zone h4');
         const descEl = document.querySelector('#upload-zone p');
 
         if (titleEl) {
-            titleEl.textContent = `${files.length} File(s) Selected`;
+            titleEl.textContent = `${validFiles.length} File(s) Selected`;
             titleEl.classList.add('text-primary');
         }
         if (descEl) descEl.textContent = "Click 'Send Now' to proceed.";
 
+        // Show file preview
+        renderFilePreview(validFiles);
+
     } else {
+    }
+}
+
+// Clear all selected files
+function clearAllFiles() {
+    // Clear from session and IndexedDB
+    sessionStorage.removeItem('gdrop_transfer_files');
+    if (window.clearFilesFromDB) {
+        window.clearFilesFromDB();
+    }
+
+    // Reset file queue in app.js
+    if (window.handleFilesSelected) {
+        window.handleFilesSelected([]);
+    }
+
+    // Reset UI
+    const titleEl = document.querySelector('#upload-zone h4');
+    const descEl = document.querySelector('#upload-zone p');
+
+    if (titleEl) {
+        titleEl.textContent = 'Ready to send files?';
+        titleEl.classList.remove('text-primary');
+    }
+    if (descEl) descEl.textContent = "Drag & drop files here or click button to browse";
+
+    // Hide file preview
+    const previewContainer = document.getElementById('file-preview-list');
+    if (previewContainer) {
+        previewContainer.innerHTML = '';
+    }
+
+    if (window.showToast) window.showToast('All files cleared', 'info');
+}
+
+// Format file size helper
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Get file icon helper
+function getFileIcon(type) {
+    if (!type) return 'description';
+    if (type.startsWith('image/')) return 'image';
+    if (type.startsWith('video/')) return 'movie';
+    if (type.startsWith('audio/')) return 'audio_file';
+    if (type.includes('pdf')) return 'picture_as_pdf';
+    if (type.includes('zip') || type.includes('rar') || type.includes('7z')) return 'folder_zip';
+    if (type.includes('document') || type.includes('word')) return 'description';
+    if (type.includes('sheet') || type.includes('excel')) return 'table_chart';
+    return 'draft';
+}
+
+// Render file preview list
+function renderFilePreview(files) {
+    let previewContainer = document.getElementById('file-preview-list');
+
+    // Create container if it doesn't exist
+    if (!previewContainer) {
+        const uploadZoneContainer = document.getElementById('upload-zone-container');
+        if (!uploadZoneContainer) return;
+
+        previewContainer = document.createElement('div');
+        previewContainer.id = 'file-preview-list';
+        previewContainer.className = 'mt-4';
+        uploadZoneContainer.appendChild(previewContainer);
+    }
+
+    if (!files || files.length === 0) {
+        previewContainer.innerHTML = '';
+        return;
+    }
+
+    // Generate preview HTML
+    const filesArray = Array.from(files);
+    const previewHTML = `
+        <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700">
+            <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Selected Files (${filesArray.length})</h4>
+                <button onclick="window.clearAllFiles()" class="text-xs font-bold text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                    Clear All
+                </button>
+            </div>
+            <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                ${filesArray.map((file, index) => `
+                    <div class="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                        <div class="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                            <span class="material-symbols-outlined text-lg">${getFileIcon(file.type)}</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-sm text-slate-800 dark:text-white truncate">${file.name}</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">${formatFileSize(file.size)}</p>
+                        </div>
+                        <button onclick="window.removeFileFromPreview(${index})" class="p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0" title="Remove file">
+                            <span class="material-symbols-outlined text-lg">close</span>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+
+    previewContainer.innerHTML = previewHTML;
+}
+
+// Remove individual file from preview
+async function removeFileFromPreview(index) {
+    // Load current files from IndexedDB
+    const files = await window.loadFilesFromDB();
+
+    if (!files || index < 0 || index >= files.length) return;
+
+    // Remove the file at index
+    files.splice(index, 1);
+
+    if (files.length === 0) {
+        clearAllFiles();
+    } else {
+        // Save back to IndexedDB
+        if (window.saveFilesToDB) {
+            await window.saveFilesToDB(files);
+        }
+
+        // Update app.js state
+        if (window.handleFilesSelected) {
+            window.handleFilesSelected(files);
+        }
+
+        // Update UI
+        const titleEl = document.querySelector('#upload-zone h4');
+        if (titleEl) {
+            titleEl.textContent = `${files.length} File(s) Selected`;
+        }
+
+        // Re-render preview
+        renderFilePreview(files);
+
+        if (window.showToast) window.showToast('File removed', 'info');
     }
 }
 
@@ -961,6 +1282,9 @@ async function loadSavedFiles() {
             }
             if (descEl) descEl.textContent = "Files restored from previous session.";
 
+            // Show file preview
+            renderFilePreview(savedFiles);
+
             if (window.showToast) {
                 window.showToast(`${savedFiles.length} file(s) restored from previous session!`, 'info');
             }
@@ -981,10 +1305,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadTransferCompleteView() {
     let overlay = document.getElementById('transfer-complete-overlay');
-    if (overlay) return overlay;
+
+    // Remove existing overlay if present to prevent stacking
+    if (overlay) {
+        if (overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+        }
+    }
 
     try {
-        const response = await fetch('pages/transfer-complete.html');
+        // Determine correct path based on current page location
+        const isInPagesFolder = window.location.pathname.includes('/pages/');
+        const completePath = isInPagesFolder ? 'transfer-complete.html' : 'pages/transfer-complete.html';
+
+        const response = await fetch(completePath);
         if (!response.ok) throw new Error("Failed to load complete page");
 
         const html = await response.text();
@@ -1028,9 +1362,23 @@ async function loadTransferCompleteView() {
 }
 
 async function showTransferCompleteUI() {
-    // 1. Sembunyikan Progress Bar
+    // Show desktop notification for transfer completion
+    showDesktopNotification(
+        '✅ Transfer Complete',
+        'All files have been successfully transferred'
+    );
+
+    // 1. Sembunyikan Progress Bar dan remove dari DOM
     const progressOverlay = document.getElementById('transfer-progress-overlay');
-    if (progressOverlay) progressOverlay.style.display = 'none';
+    if (progressOverlay) {
+        progressOverlay.style.display = 'none';
+        // Remove from DOM after transition completes to prevent stacking issues
+        setTimeout(() => {
+            if (progressOverlay.parentNode) {
+                progressOverlay.parentNode.removeChild(progressOverlay);
+            }
+        }, 500);
+    }
 
     // 2. Load View
     let overlay = await loadTransferCompleteView();
@@ -1039,26 +1387,57 @@ async function showTransferCompleteUI() {
         return;
     }
 
-    // Mengambil settingan terakhir user, default ke 'light'
+    // Fail-Safe: Restore data jika memori hilang (misal karena refresh)
+    if (!window.lastTransferFiles || window.lastTransferFiles.length === 0) {
+        console.warn("DEBUG: Data hilang di Complete Screen, mencoba restore...");
+        try {
+            const stored = sessionStorage.getItem('gdrop_transfer_files');
+            if (stored) {
+                window.lastTransferFiles = JSON.parse(stored);
+            }
+        } catch (e) { console.error("Restore error:", e); }
+    }
+
+    // Restore Peer Name jika hilang
+    if (!window.peerDeviceName) {
+        const groupName = sessionStorage.getItem('gdrop_group_name');
+        if (groupName) window.peerDeviceName = groupName;
+        else window.peerDeviceName = "Recipient";
+    }
+
+    // Apply Theme
     const storedTheme = localStorage.getItem('gopherdrop-theme') || 'light';
     if (window.applyTheme) {
         window.applyTheme(storedTheme);
     }
-    // Safety check: Paksa hapus class dark jika settingan light
     if (storedTheme === 'light') {
         document.documentElement.classList.remove('dark');
-        overlay.classList.remove('dark'); // Pastikan overlay juga bersih
+        overlay.classList.remove('dark');
     }
-    // -------------------------------------------------------
 
     // 3. Persiapan Data
     const files = window.lastTransferFiles || [];
     const isReceiver = window.isReceiverMode || false;
 
-    // Logika Nama: Jika Receiver -> Tampilkan Nama Pengirim. Jika Sender -> Tampilkan Penerima.
-    const peerName = isReceiver
+    // --- [UPDATE 1: FORMATTER NAMA] ---
+    // Agar ID panjang (Public Key) dipotong jadi pendek
+    const formatPeerName = (name) => {
+        if (!name) return "Unknown";
+        // Jika panjang > 20 karakter & tidak ada spasi (kemungkinan besar ID/Key), kita potong
+        if (name.length > 20 && !name.includes(' ')) {
+            return `${name.substring(0, 6)}...${name.substring(name.length - 4)}`;
+        }
+        return name;
+    };
+
+    // Tentukan Raw Name
+    let rawPeerName = isReceiver
         ? (window.senderDeviceName || "Unknown Sender")
-        : (window.peerDeviceName || (window.transferRecipientCount > 1 ? "Multiple Devices" : "Recipient"));
+        : (window.peerDeviceName || (window.transferRecipientCount > 1 ? `${window.transferRecipientCount} Devices` : "Recipient"));
+
+    // Terapkan Formatter
+    const peerName = formatPeerName(rawPeerName);
+    // ----------------------------------
 
     const startTime = window.transferStartTime || Date.now();
     let duration = Date.now() - startTime;
@@ -1083,13 +1462,24 @@ async function showTransferCompleteUI() {
     const groupNameEl = overlay.querySelector('#complete-group-name');
     const titleEl = overlay.querySelector('h1');
     const descEl = overlay.querySelector('main > section > p');
-
-    // Label kecil di atas nama (Group Insights / Sent By)
     const cardTitleLabel = overlay.querySelector('#complete-group-name').previousElementSibling;
 
     if (timeEl) timeEl.textContent = formatTime(duration);
     if (sizeEl) sizeEl.textContent = formatSize(totalSize);
-    if (groupNameEl) groupNameEl.textContent = peerName;
+
+    // Update nama dengan hasil formatter
+    // if (groupNameEl) groupNameEl.textContent = peerName;
+    if (groupNameEl) {
+        if (!isReceiver) {
+            // SENDER VIEW: Tampilkan Total Device saja biar bersih
+            // Karena detail nama sudah ada di list bawah
+            const targetCount = window.transferRecipientCount || 1;
+            groupNameEl.textContent = `${targetCount} Device${targetCount > 1 ? 's' : ''}`;
+        } else {
+            // RECEIVER VIEW: Tetap tampilkan nama pengirim
+            groupNameEl.textContent = peerName;
+        }
+    }
 
     // 5. LOGIKA ADAPTIF (SENDER vs RECEIVER)
     if (isReceiver) {
@@ -1097,17 +1487,13 @@ async function showTransferCompleteUI() {
         if (titleEl) titleEl.innerHTML = 'Files <span class="font-bold text-green-500">Received!</span>';
         if (descEl) descEl.textContent = `Successfully received files from ${peerName}.`;
 
-        // Ubah "Group Insights" menjadi "SENT BY"
         if (cardTitleLabel) cardTitleLabel.textContent = "SENT BY";
-        // Pastikan nama pengirim muncul
-        if (groupNameEl) groupNameEl.textContent = peerName;
     } else {
         // --- TAMPILAN PENGIRIM ---
         if (titleEl) titleEl.innerHTML = 'Transfer <span class="font-bold text-primary">Complete!</span>';
         if (descEl) descEl.textContent = `Successfully delivered files to ${peerName}.`;
 
         if (cardTitleLabel) cardTitleLabel.textContent = "RECIPIENT";
-        if (groupNameEl) groupNameEl.textContent = peerName;
     }
 
     // 6. RENDER LIST FILE
@@ -1115,27 +1501,22 @@ async function showTransferCompleteUI() {
     if (fileListContainer) {
         fileListContainer.innerHTML = '';
 
-        // Jika Receiver, ambil data dari blobs agar punya URL download
         const fileSource = isReceiver ? (window.receivedFileBlobs || []) : files;
 
         fileSource.forEach(file => {
-            // Icon Logic Sederhana
             let icon = 'description';
             if (file.type && file.type.includes('image')) icon = 'image';
             else if (file.type && file.type.includes('video')) icon = 'movie';
             else if (file.type && file.type.includes('audio')) icon = 'audio_file';
 
-            // Tombol Aksi di Kanan (Download vs Centang)
             let actionButton = '';
             if (isReceiver && file.url) {
-                // Tombol Re-Download (Receiver)
                 actionButton = `
                     <a href="${file.url}" download="${file.name}" class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all" title="Download Again">
                         <span class="material-symbols-outlined">download</span>
                     </a>
                 `;
             } else {
-                // Centang (Sender)
                 actionButton = `
                     <div class="w-10 h-10 flex items-center justify-center text-green-500">
                         <span class="material-symbols-outlined">check_circle</span>
@@ -1144,7 +1525,6 @@ async function showTransferCompleteUI() {
             }
 
             const newItem = document.createElement('div');
-            // Gunakan class border netral agar mengikuti tema
             newItem.className = 'glass-panel p-4 rounded-3xl flex items-center gap-4 border border-slate-200 dark:border-slate-700';
             newItem.innerHTML = `
                 <div class="w-12 h-12 bg-slate-100 dark:bg-slate-700/50 text-slate-500 rounded-2xl flex items-center justify-center flex-shrink-0">
@@ -1160,7 +1540,65 @@ async function showTransferCompleteUI() {
         });
     }
 
-    // Button Footer in Transfer Complete Overlay
+    // --- [UPDATE 2: RENDER RECIPIENT LIST (KHUSUS SENDER)] ---
+    // Agar daftar device yang menerima file muncul di bawah summary
+    const recipientListContainer = overlay.querySelector('#complete-recipient-list');
+
+    if (recipientListContainer) {
+        recipientListContainer.innerHTML = '';
+
+        if (!isReceiver) {
+            // Ambil data target devices dari session storage
+            let targets = [];
+            try {
+                targets = JSON.parse(sessionStorage.getItem('gdrop_transfer_devices') || '[]');
+            } catch (e) { }
+
+            if (targets.length > 0) {
+                // Render list device satu per satu
+                recipientListContainer.innerHTML = targets.map(device => `
+                    <div class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-100 dark:border-slate-700 mb-2">
+                        <div class="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 dark:border-slate-700">
+                            <span class="material-symbols-outlined text-lg">${device.icon || 'computer'}</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">${device.name}</p>
+                            <p class="text-[10px] text-green-500 font-bold uppercase tracking-wide">Delivered</p>
+                        </div>
+                        <span class="material-symbols-outlined text-green-500 text-base">check_circle</span>
+                    </div>
+                `).join('');
+            } else {
+                // Fallback kalau data target hilang (misal refresh), tampilkan Peer Name saja
+                recipientListContainer.innerHTML = `
+                    <div class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <div class="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 shadow-sm">
+                            <span class="material-symbols-outlined">devices</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">${peerName}</p>
+                            <p class="text-[10px] text-green-500 font-bold uppercase tracking-wide">Delivered</p>
+                        </div>
+                        <span class="material-symbols-outlined text-green-500 text-base">check_circle</span>
+                    </div>`;
+            }
+        } else {
+            // Jika Receiver, tampilkan pengirimnya
+            recipientListContainer.innerHTML = `
+                <div class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-2xl border border-slate-100 dark:border-slate-700">
+                    <div class="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 shadow-sm">
+                        <span class="material-symbols-outlined">person</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">${peerName}</p>
+                        <p class="text-[10px] text-primary font-bold uppercase tracking-wide">Sender</p>
+                    </div>
+                </div>`;
+        }
+    }
+    // ---------------------------------------------------------
+
+    // Button Footer
     const footerBtnContainer = overlay.querySelector('footer div:last-child');
     if (footerBtnContainer) {
         footerBtnContainer.innerHTML = '';
@@ -1183,27 +1621,128 @@ async function showTransferCompleteUI() {
     }
 }
 
+// ==========================================
+// TRANSFER CONFIRMATION MODAL (UI CANTIK)
+// ==========================================
+
+function showTransferConfirmModal(fileCount, totalSize, deviceCount, onConfirm) {
+    let modal = document.getElementById('transfer-confirm-modal');
+
+    // Kalau belum ada, create elemennya (sekali aja)
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'transfer-confirm-modal';
+        modal.className = 'fixed inset-0 z-[100] flex items-center justify-center hidden';
+
+        // HTML Inner (Mirip Delete Modal tapi tema BIRU/PRIMARY 🚀)
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeTransferConfirmModal()"></div>
+            <div class="relative bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl z-10 text-center transition-all scale-95 opacity-0 transform" id="transfer-modal-content">
+                
+                <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span class="material-symbols-outlined text-3xl text-primary">rocket_launch</span>
+                </div>
+
+                <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-2">Ready to Send?</h3>
+                
+                <p class="text-slate-500 dark:text-slate-400 mb-6 text-sm leading-relaxed" id="transfer-modal-desc">
+                    </p>
+
+                <div class="flex gap-3">
+                    <button onclick="closeTransferConfirmModal()" class="flex-1 py-3 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
+                        Cancel
+                    </button>
+                    <button id="btn-confirm-transfer" class="flex-1 py-3 bg-primary text-white rounded-xl font-bold hover:brightness-110 shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2">
+                        <span>Send Now</span>
+                        <span class="material-symbols-outlined text-sm">send</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // Update Text Dinamis
+    const descEl = document.getElementById('transfer-modal-desc');
+    descEl.innerHTML = `Sending <strong>${fileCount} file(s)</strong> <br>Total size: <strong>${totalSize}</strong> <br>to <strong>${deviceCount} device(s)</strong>.`;
+
+    // Pasang Action ke Tombol Send (Clone node biar event listener gak numpuk)
+    const btn = document.getElementById('btn-confirm-transfer');
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+
+    newBtn.onclick = () => {
+        closeTransferConfirmModal();
+        onConfirm(); // Callback fungsi kirim
+    };
+
+    // Animasi Muncul
+    modal.classList.remove('hidden');
+    const content = document.getElementById('transfer-modal-content');
+    setTimeout(() => {
+        content.classList.remove('scale-95', 'opacity-0');
+        content.classList.add('scale-100', 'opacity-100');
+    }, 10);
+}
+
+// Fungsi Tutup Modal
+window.closeTransferConfirmModal = function () {
+    const modal = document.getElementById('transfer-confirm-modal');
+    const content = document.getElementById('transfer-modal-content');
+
+    if (content) {
+        content.classList.remove('scale-100', 'opacity-100');
+        content.classList.add('scale-95', 'opacity-0');
+    }
+
+    setTimeout(() => {
+        if (modal) modal.classList.add('hidden');
+    }, 200);
+};
+
 window.sendDirectlyToSelection = function () {
-    const selectedDevices = getSelectedDevices();
+    const selectedDevices = getSelectedDevices(); // Pastikan fungsi helper ini ada
 
     if (selectedDevices.length === 0) {
         if (window.showToast) window.showToast('Please select at least one device', 'warning');
         return;
     }
 
-    // Cek apakah ada file yang dipilih?
+    // Check if actual files exist in fileQueue (source of truth)
+    // fileQueue contains actual File objects, sessionStorage only has metadata
+    const hasActualFiles = window.getFileQueueLength && window.getFileQueueLength() > 0;
     const filesData = sessionStorage.getItem('gdrop_transfer_files');
-    const hasFiles = filesData && JSON.parse(filesData).length > 0;
+    const hasStoredMeta = filesData && JSON.parse(filesData).length > 0;
 
-    if (!hasFiles) {
-        // Jika tidak ada file, munculkan prompt upload, lalu lanjut kirim
+    // If sessionStorage has files but fileQueue is empty, it's stale data
+    if (hasStoredMeta && !hasActualFiles) {
+        sessionStorage.removeItem('gdrop_transfer_files');
+    }
+
+    if (!hasActualFiles) {
+        // Jika tidak ada file, munculkan prompt upload
         showFileUploadPrompt(() => {
-            proceedDirectTransfer(selectedDevices);
+            // Setelah file dipilih, panggil fungsi ini lagi (rekursif)
+            window.sendDirectlyToSelection();
         });
         return;
     }
 
-    proceedDirectTransfer(selectedDevices);
+    // Parse data file
+    const files = JSON.parse(filesData);
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    const formattedSize = formatFileSize ? formatFileSize(totalSize) : (totalSize / 1024).toFixed(1) + ' KB'; // Fallback format
+
+    // Ganti Confirm() bawaan dengan Modal UI Cantik
+    showTransferConfirmModal(
+        files.length,
+        formattedSize,
+        selectedDevices.length,
+        () => {
+            // Ini dijalankan kalau user klik "Send Now" di modal
+            proceedDirectTransfer(selectedDevices);
+        }
+    );
 };
 
 // Helper untuk eksekusi transfer
@@ -1215,7 +1754,13 @@ function proceedDirectTransfer(selectedDevices) {
 
     if (sendBtn) {
         sendBtn.disabled = true;
-        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+        sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Connecting...';
+    }
+
+    // Show connecting toast
+    if (window.showToast) {
+        const deviceNames = selectedDevices.map(d => d.name).join(', ');
+        window.showToast(`🔄 Establishing connection with ${selectedDevices.length > 1 ? 'devices' : deviceNames}...`, 'info');
     }
 
     // Reset state transfer sebelumnya jika ada
@@ -1231,7 +1776,13 @@ function proceedDirectTransfer(selectedDevices) {
     // 3. Mulai proses transfer (panggil fungsi core di app.js)
     if (window.startTransferProcess) {
         window.startTransferProcess();
-        if (window.showToast) window.showToast(`Sending to ${sessionName}...`, 'success');
+
+        // Update button after a delay (connection establishing)
+        setTimeout(() => {
+            if (sendBtn) {
+                sendBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Sending...';
+            }
+        }, 1000);
     }
 }
 
@@ -1243,6 +1794,8 @@ window.showTransferProgressUI = showTransferProgressUI;
 window.updateFileProgressUI = updateFileProgressUI;
 window.endTransferSession = endTransferSession;
 window.showToast = showToast;
+window.showDesktopNotification = showDesktopNotification;
+window.requestNotificationPermission = requestNotificationPermission;
 window.showIncomingModal = showIncomingModal;
 window.closeIncomingModal = closeIncomingModal;
 window.toggleDeviceSelection = toggleDeviceSelection;
@@ -1257,4 +1810,6 @@ window.closeFileUploadPrompt = closeFileUploadPrompt;
 window.triggerPromptFileSelect = triggerPromptFileSelect;
 window.proceedDirectTransfer = proceedDirectTransfer;
 window.sendDirectlyToSelection = sendDirectlyToSelection;
+window.clearAllFiles = clearAllFiles;
+window.removeFileFromPreview = removeFileFromPreview;
 window.showTransferCompleteUI = showTransferCompleteUI;

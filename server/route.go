@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"gopherdrop/helper"
-	"log"
 	"time"
 
 	jwtware "github.com/gofiber/contrib/jwt"
@@ -168,7 +167,6 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 	group.Get("/ws", websocket.New(func(conn *websocket.Conn) {
 		claims, ok := conn.Locals("claims").(jwt.MapClaims)
 		if !ok {
-			log.Println("missing claims, closing")
 			return
 		}
 
@@ -178,7 +176,6 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 
 		var user User
 		if err := s.DB.Where("public_key = ?", pubkey).First(&user).Error; err != nil {
-			log.Println("invalid JWT")
 			return
 		}
 
@@ -207,10 +204,8 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 			delete(s.MUser, conn)
 
 			s.MUserMu.Unlock()
-			log.Println("WS disconnected user:", claims["username"])
 		}()
 
-		log.Println("WS connected user:", claims["username"])
 		HandleWS(s, muser)
 	}))
 }
@@ -220,6 +215,7 @@ func (s *Server) SetupAllEndPoint() {
 	protected := api_pub.Group("/protected", jwtware.New(jwtware.Config{
 		SigningKey:  jwtware.SigningKey{Key: []byte(s.Pass)},
 		TokenLookup: "header:Authorization,query:token",
+		AuthScheme:  "Bearer",
 	}))
 
 	// GET: /

@@ -79,6 +79,21 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				sendWS(mUser.Conn, ERROR, "db failed to save your changes")
 				continue
 			}
+
+			// Update the user's discoverable status in memory
+			mUser.User.IsDiscoverable = n
+
+			// Refresh the cached user list and broadcast to all connected clients
+			// Hold write lock for entire operation to ensure atomicity
+			s.MUserMu.Lock()
+			CacheDiscoverableUser(s)
+
+			// Broadcast updated user list to all connected clients
+			for _, connectedUser := range s.MUser {
+				sendWS(connectedUser.Conn, USER_SHARE_LIST, s.CachedUser)
+			}
+			s.MUserMu.Unlock()
+
 			sendWS(mUser.Conn, CONFIG_DISCOVERABLE, "success")
 			continue
 		case START_SHARING:
@@ -252,6 +267,7 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 			var data struct {
 				TransactionID string `mapstructure:"transaction_id"`
 				Accept        bool   `mapstructure:"accept"`
+				Reason        string `mapstructure:"reason"`
 			}
 			if err := mapstructure.Decode(msg.Data, &data); err != nil {
 				sendWS(mUser.Conn, ERROR, "invalid data for FILE_SHARE_ACCEPT")
@@ -267,8 +283,24 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				continue
 			}
 
+			// Check if the transaction has already started
+			if tx.Started {
+				s.TransactionMu.Unlock()
+				sendWS(mUser.Conn, ERROR, "transaction has already started")
+				continue
+			}
+
+			// Find the target and update status
+			var targetFound bool
+			var alreadyResponded bool
 			for _, target := range tx.Targets {
 				if target.User == mUser {
+					targetFound = true
+					// Check if already responded to prevent duplicate responses
+					if target.Status != Pending {
+						alreadyResponded = true
+						break
+					}
 					if data.Accept {
 						target.Status = Accepted
 					} else {
@@ -278,22 +310,50 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 				}
 			}
 
+			if !targetFound {
+				s.TransactionMu.Unlock()
+				sendWS(mUser.Conn, ERROR, "you are not a target of this transaction")
+				continue
+			}
+
+			if alreadyResponded {
+				s.TransactionMu.Unlock()
+				sendWS(mUser.Conn, TRANSACTION_SHARE_ACCEPT, "response already recorded")
+				continue
+			}
+
 			sendWS(mUser.Conn, TRANSACTION_SHARE_ACCEPT, "response recorded")
 
 			// Notify sender about the response (both accept and decline)
 			if data.Accept {
 				// Notify sender about acceptance
 				sendWS(tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
-					Type          string `json:"type"`
-					Username      string `json:"username"`
-					Accepted      bool   `json:"accepted"`
-					TransactionID string `json:"transaction_id"`
+					Type            string `json:"type"`
+					Username        string `json:"username"`
+					Accepted        bool   `json:"accepted"`
+					TransactionID   string `json:"transaction_id"`
+					SenderPublicKey string `json:"sender_public_key"`
 				}{
-					Type:          "accept_notification",
-					Username:      mUser.MinUser.Username,
-					Accepted:      true,
-					TransactionID: data.TransactionID,
+					Type:            "accept_notification",
+					Username:        mUser.MinUser.Username,
+					Accepted:        true,
+					TransactionID:   data.TransactionID,
+					SenderPublicKey: mUser.MinUser.PublicKey,
 				})
+
+				// Langsung kirim START_TRANSACTION ke receiver yang baru accept
+				// Ini mengatasi race condition ketika receiver accept setelah
+				// sender sudah mengirim START_TRANSACTION sebelumnya
+				payload := struct {
+					TransactionID string      `json:"transaction_id"`
+					Sender        string      `json:"sender"`
+					Files         []*FileInfo `json:"files"`
+				}{
+					TransactionID: tx.ID,
+					Sender:        tx.Sender.MinUser.Username,
+					Files:         tx.Files,
+				}
+				sendWS(mUser.Conn, START_TRANSACTION, payload)
 			} else {
 				// Notify sender about decline
 				sendWS(tx.Sender.Conn, TRANSACTION_SHARE_ACCEPT, struct {
@@ -301,11 +361,13 @@ func HandleWS(s *Server, mUser *ManagedUser) {
 					Username      string `json:"username"`
 					Declined      bool   `json:"declined"`
 					TransactionID string `json:"transaction_id"`
+					Reason        string `json:"reason,omitempty"`
 				}{
 					Type:          "decline_notification",
 					Username:      mUser.MinUser.Username,
 					Declined:      true,
 					TransactionID: data.TransactionID,
+					Reason:        data.Reason,
 				})
 			}
 			s.TransactionMu.Unlock()
