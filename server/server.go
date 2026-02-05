@@ -27,7 +27,7 @@ type ManagedUser struct {
 
 type Transaction struct {
 	ID      string               `json:"id"`
-	Sender  *ManagedUser         `json:"-"`
+	Sender  *ManagedUser         `json:"sender"`
 	Targets []*TransactionTarget `json:"-"`
 	Files   []*FileInfo          `json:"files"`
 	Started bool                 `json:"started"`
@@ -36,14 +36,14 @@ type Transaction struct {
 type TargetStatus int
 
 const (
-	Pending TargetStatus = iota
-	Accepted
-	Declined
+	Pending  TargetStatus = iota // 0
+	Accepted                     // 1
+	Declined                     // 2
 )
 
 type TransactionTarget struct {
-	User   *ManagedUser
-	Status TargetStatus
+	User   *ManagedUser `json:"user"`
+	Status TargetStatus `json:"status"`
 }
 
 type FileInfo struct {
@@ -62,8 +62,10 @@ type Server struct {
 	MUser         map[*websocket.Conn]*ManagedUser
 	MUserMu       sync.RWMutex
 	CachedUser    []*ManagedUser
+	CachedUserMu  sync.RWMutex
 	Transactions  map[string]*Transaction
 	TransactionMu sync.RWMutex
+	WriteMu       sync.RWMutex
 }
 
 func InitServer(url string, password string) *Server {

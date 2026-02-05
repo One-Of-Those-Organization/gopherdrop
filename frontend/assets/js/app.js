@@ -673,7 +673,16 @@ function handleIncomingTransferOffer(data) {
 
     pendingTransactionId = data.transaction.id;
     hasRespondedToPendingTransaction = false; // Reset flag for new transaction
-    const senderName = data.sender || "Unknown Device";
+    let senderName = "Unknown Device";
+    if (typeof data.sender === 'string') {
+        senderName = data.sender;
+    } else if (data.sender && data.sender.min_user && data.sender.min_user.username) {
+        senderName = data.sender.min_user.username;
+    } else if (data.sender && data.sender.username) {
+        senderName = data.sender.username;
+    } else if (data.sender && data.sender.name) {
+        senderName = data.sender.name;
+    }
     const files = data.transaction.files || [];
 
     // Simpan data untuk UI transfer progress setelah accept

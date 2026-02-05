@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"gopherdrop/helper"
+	"log"
 	"time"
 
 	jwtware "github.com/gofiber/contrib/jwt"
@@ -174,6 +175,20 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		expUnix := int64(claims["exp"].(float64))
 		expTime := time.Unix(expUnix, 0)
 
+		s.MUserMu.Lock()
+		for _, managedUser := range s.MUser {
+			if managedUser.User.PublicKey == pubkey {
+				managedUser.Conn.Close()
+				managedUser.Conn = conn
+
+				s.CachedUserMu.Lock()
+				DelCachedUser(s, managedUser.User.ID)
+				s.CachedUserMu.Unlock()
+				break
+			}
+		}
+		s.MUserMu.Unlock()
+
 		var user User
 		if err := s.DB.Where("public_key = ?", pubkey).First(&user).Error; err != nil {
 			return
@@ -189,21 +204,26 @@ func SetupWebSocketEndPoint(s *Server, group fiber.Router) {
 		}
 		s.MUser[conn] = muser
 
+		s.MUserMu.Unlock()
+
 		if len(s.CachedUser) <= 0 {
 			CacheDiscoverableUser(s)
 		} else {
 			AddCachedUser(s, muser)
 		}
 
-		s.MUserMu.Unlock()
-
 		defer func() {
-			s.MUserMu.Lock()
-
+			s.CachedUserMu.Lock()
 			DelCachedUser(s, s.MUser[conn].User.ID)
-			delete(s.MUser, conn)
+			s.CachedUserMu.Unlock()
 
+			conn.Close()
+
+			s.MUserMu.Lock()
+			delete(s.MUser, conn)
 			s.MUserMu.Unlock()
+
+			log.Println("WS disconnected user:", claims["username"])
 		}()
 
 		HandleWS(s, muser)
